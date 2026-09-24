@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --color-tinta: #17264D;
+  --color-mariano: #2F55A4;
+  --color-cielo: #E8EEF8;
+  --color-oro: #B8892B;
+  --color-papel: #FBFBFD;
+  --color-alerta: #B3261E;
+  --font-sans: "Figtree", system-ui, sans-serif;
+  --font-serif: "Source Serif 4", Georgia, serif;
+}
+
+@layer base {
+  body { background: var(--color-papel); color: var(--color-tinta); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+  h1, h2, h3 { font-family: var(--font-serif); }
+}
+
+@layer components {
+  .campo { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mariano; }
+  .etiqueta { @apply mb-1 block text-sm font-medium text-slate-700; }
+  .btn { @apply inline-flex items-center justify-center rounded-md bg-mariano px-4 py-2 text-sm font-semibold text-white hover:bg-tinta disabled:opacity-50; }
+  .btn-sec { @apply inline-flex items-center justify-center rounded-md border border-mariano px-4 py-2 text-sm font-semibold text-mariano hover:bg-cielo; }
+  .nota { @apply w-16 rounded border border-slate-300 bg-white px-2 py-1 text-center text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-mariano; }
+}
