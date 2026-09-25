@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { CAMPOS, definitiva, fmt, parsearNota, NOTA_MINIMA } from '../lib/notas'
+import { ordenarEstudiantes, mostrarNombre, copiarColumna } from '../lib/planilla'
+import Actividades from '../components/Actividades'
+
+const aTexto = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','))
 
 export default function Digitacion({ perfil }) {
   const admin = perfil?.rol === 'admin'
-  const [opciones, setOpciones] = useState([]) // [{cohorte_id, nombre, semestre}]
+  const [opciones, setOpciones] = useState([])
   const [espacios, setEspacios] = useState([])
   const [sel, setSel] = useState({ cohorte: '', semestre: '', espacio: '' })
-  const [estudiantes, setEstudiantes] = useState([])
-  const [valores, setValores] = useState({}) // {estId: {campo: texto}}
+  const [crudos, setCrudos] = useState([])
+  const [valores, setValores] = useState({})
   const [sucios, setSucios] = useState(new Set())
+  const [numActividades, setNumActividades] = useState(0)
+  const [vista, setVista] = useState('planilla')
+  const [orden, setOrden] = useState('apellidos')
+  const [copia, setCopia] = useState({})
+  const [sobrescribir, setSobrescribir] = useState(false)
   const [mensaje, setMensaje] = useState(null)
   const [guardando, setGuardando] = useState(false)
 
@@ -28,42 +37,75 @@ export default function Digitacion({ perfil }) {
   const semestres = opciones.filter((o) => String(o.cohorte_id) === sel.cohorte).map((o) => o.semestre)
   const espaciosSem = espacios.filter((e) => String(e.semestre) === sel.semestre)
   const espacio = espacios.find((e) => String(e.id) === sel.espacio)
+  const estudiantes = useMemo(() => ordenarEstudiantes(crudos, orden), [crudos, orden])
+  const contenidosBloqueado = numActividades > 0
 
-  useEffect(() => {
-    if (!sel.cohorte || !sel.espacio) { setEstudiantes([]); return }
-    (async () => {
-      const { data: ests } = await supabase.from('estudiantes').select('id, nombre_completo')
-        .eq('cohorte_id', sel.cohorte).eq('estado', 'activo').order('nombre_completo')
-      const ids = (ests ?? []).map((e) => e.id)
-      const { data: ns } = ids.length
-        ? await supabase.from('notas').select('*').eq('espacio_id', sel.espacio).in('estudiante_id', ids)
-        : { data: [] }
-      const mapa = Object.fromEntries((ns ?? []).map((n) => [n.estudiante_id, n]))
-      setEstudiantes(ests ?? [])
-      setValores(Object.fromEntries(ids.map((id) => [id,
-        Object.fromEntries(CAMPOS.map(([k]) => [k, mapa[id]?.[k] != null ? String(mapa[id][k]).replace('.', ',') : '']))])))
-      setSucios(new Set()); setMensaje(null)
-    })()
-  }, [sel.cohorte, sel.espacio])
+  async function cargar() {
+    if (!sel.cohorte || !sel.espacio) { setCrudos([]); return }
+    const { data: ests } = await supabase.from('estudiantes').select('id, nombre_completo')
+      .eq('cohorte_id', sel.cohorte).eq('estado', 'activo')
+    const ids = (ests ?? []).map((e) => e.id)
+    const [{ data: ns }, { count }] = await Promise.all([
+      ids.length ? supabase.from('notas').select('*').eq('espacio_id', sel.espacio).in('estudiante_id', ids) : Promise.resolve({ data: [] }),
+      supabase.from('actividades').select('id', { count: 'exact', head: true }).eq('cohorte_id', sel.cohorte).eq('espacio_id', sel.espacio),
+    ])
+    const mapa = Object.fromEntries((ns ?? []).map((n) => [n.estudiante_id, n]))
+    setCrudos(ests ?? [])
+    setValores(Object.fromEntries(ids.map((id) => [id, Object.fromEntries(CAMPOS.map(([k]) => [k, aTexto(mapa[id]?.[k])]))])))
+    setNumActividades(count ?? 0)
+    setSucios(new Set())
+  }
+  useEffect(() => { setMensaje(null); setCopia({}); cargar() }, [sel.cohorte, sel.espacio])
+
+  function elegir(nuevo) {
+    if (sucios.size && !confirm('Tienes notas sin guardar. ¿Salir sin guardarlas?')) return
+    setSel(nuevo); setVista('planilla')
+  }
+  function cambiarVista(v) {
+    if (v === vista) return
+    if (sucios.size && !confirm('Tienes notas sin guardar en la planilla. ¿Continuar sin guardarlas?')) return
+    if (v === 'planilla') cargar()
+    setVista(v)
+  }
 
   function cambiar(estId, campo, texto) {
     setValores((v) => ({ ...v, [estId]: { ...v[estId], [campo]: texto } }))
     setSucios((s) => new Set(s).add(estId))
+    setMensaje(null)
   }
 
-  const invalidas = estudiantes.some((e) => CAMPOS.some(([k]) => parsearNota(valores[e.id]?.[k] ?? '') === undefined))
+  function aplicarATodos(campo) {
+    const texto = (copia[campo] ?? '').trim()
+    if (parsearNota(texto) === undefined) { setMensaje({ tipo: 'error', texto: 'La nota a copiar debe estar entre 0,0 y 5,0.' }); return }
+    if (texto === '' && !sobrescribir) return
+    const { nuevo, cambiados } = copiarColumna({ estudiantes, valores, campo, texto, sobrescribir })
+    setValores(nuevo)
+    setSucios((s) => { const n = new Set(s); cambiados.forEach((id) => n.add(id)); return n })
+    setMensaje(cambiados.length
+      ? { tipo: 'ok', texto: `Copiado a ${cambiados.length} estudiante(s). Recuerda guardar.` }
+      : { tipo: 'ok', texto: 'Todas las casillas ya tenían nota. Marca "reemplazar" si quieres sobrescribirlas.' })
+  }
+
+  const camposEditables = CAMPOS.filter(([k]) => !(k === 'contenidos' && contenidosBloqueado))
+  const invalidas = estudiantes.some((e) => camposEditables.some(([k]) => parsearNota(valores[e.id]?.[k] ?? '') === undefined))
 
   async function guardar() {
     setGuardando(true); setMensaje(null)
+    const ahora = new Date().toISOString()
     const filas = [...sucios].map((estId) => ({
-      estudiante_id: estId, espacio_id: Number(sel.espacio), actualizado_por: perfil.id, actualizado: new Date().toISOString(),
-      ...Object.fromEntries(CAMPOS.map(([k]) => [k, parsearNota(valores[estId][k])])),
+      estudiante_id: estId, espacio_id: Number(sel.espacio), actualizado_por: perfil.id, actualizado: ahora,
+      ...Object.fromEntries(camposEditables.map(([k]) => [k, parsearNota(valores[estId][k])])),
     }))
     const { error } = await supabase.from('notas').upsert(filas, { onConflict: 'estudiante_id,espacio_id' })
     setGuardando(false)
     if (error) setMensaje({ tipo: 'error', texto: `No se guardaron las notas: ${error.message}` })
     else { setSucios(new Set()); setMensaje({ tipo: 'ok', texto: `Notas guardadas para ${filas.length} estudiante(s).` }) }
   }
+
+  const pestana = (v, t) => (
+    <button onClick={() => cambiarVista(v)}
+      className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${vista === v ? 'border-mariano text-mariano' : 'border-transparent text-slate-500'}`}>{t}</button>
+  )
 
   return (
     <section>
@@ -78,21 +120,21 @@ export default function Digitacion({ perfil }) {
         <div className="mb-6 grid gap-4 sm:grid-cols-3">
           <div>
             <label className="etiqueta" htmlFor="c">Cohorte</label>
-            <select id="c" className="campo" value={sel.cohorte} onChange={(e) => setSel({ cohorte: e.target.value, semestre: '', espacio: '' })}>
+            <select id="c" className="campo" value={sel.cohorte} onChange={(e) => elegir({ cohorte: e.target.value, semestre: '', espacio: '' })}>
               <option value="">Selecciona</option>
               {cohortes.map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
             </select>
           </div>
           <div>
             <label className="etiqueta" htmlFor="s">Semestre</label>
-            <select id="s" className="campo" disabled={!sel.cohorte} value={sel.semestre} onChange={(e) => setSel({ ...sel, semestre: e.target.value, espacio: '' })}>
+            <select id="s" className="campo" disabled={!sel.cohorte} value={sel.semestre} onChange={(e) => elegir({ ...sel, semestre: e.target.value, espacio: '' })}>
               <option value="">Selecciona</option>
               {semestres.map((s) => <option key={s} value={s}>Semestre {s}</option>)}
             </select>
           </div>
           <div>
             <label className="etiqueta" htmlFor="e">Módulo, retiro o seminario</label>
-            <select id="e" className="campo" disabled={!sel.semestre} value={sel.espacio} onChange={(e) => setSel({ ...sel, espacio: e.target.value })}>
+            <select id="e" className="campo" disabled={!sel.semestre} value={sel.espacio} onChange={(e) => elegir({ ...sel, espacio: e.target.value })}>
               <option value="">Selecciona</option>
               {espaciosSem.map((e) => <option key={e.id} value={e.id}>{e.etiqueta} · {e.nombre}</option>)}
             </select>
@@ -100,53 +142,110 @@ export default function Digitacion({ perfil }) {
         </div>
       )}
 
-      {espacio && (
-        estudiantes.length === 0 ? (
-          <p className="text-slate-500">Esta cohorte no tiene estudiantes activos.</p>
-        ) : (
-          <>
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-              <table className="w-full min-w-[640px] text-sm">
-                <caption className="bg-tinta px-4 py-2 text-left font-serif text-base font-semibold text-white">
-                  {espacio.etiqueta} · {espacio.nombre}
-                </caption>
-                <thead className="bg-cielo">
-                  <tr><th className="p-2 text-left">Estudiante</th>{CAMPOS.map(([k, t]) => <th key={k} className="p-2">{t}</th>)}<th className="p-2">Definitiva</th></tr>
-                </thead>
-                <tbody>
-                  {estudiantes.map((est) => {
-                    const v = valores[est.id] ?? {}
-                    const d = definitiva(Object.fromEntries(CAMPOS.map(([k]) => [k, parsearNota(v[k] ?? '') ?? null])))
-                    return (
-                      <tr key={est.id} className={`border-t border-slate-100 ${sucios.has(est.id) ? 'bg-amber-50' : ''}`}>
-                        <td className="p-2 font-medium">{est.nombre_completo}</td>
-                        {CAMPOS.map(([k, t]) => {
-                          const mal = parsearNota(v[k] ?? '') === undefined
-                          return (
-                            <td key={k} className="p-2 text-center">
-                              <input inputMode="decimal" aria-label={`${t} de ${est.nombre_completo}`}
-                                className={`nota ${mal ? 'border-alerta ring-1 ring-alerta' : ''}`}
-                                value={v[k] ?? ''} onChange={(e) => cambiar(est.id, k, e.target.value)} />
-                            </td>
-                          )
-                        })}
-                        <td className={`p-2 text-center font-semibold tabular-nums ${d !== null && d < NOTA_MINIMA ? 'text-alerta' : ''}`}>{fmt(d)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+      {espacio && (estudiantes.length === 0 ? (
+        <p className="text-slate-500">Esta cohorte no tiene estudiantes activos.</p>
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200">
+            <div className="flex gap-2">
+              {pestana('planilla', 'Planilla')}
+              {pestana('actividades', `Actividades de contenidos${numActividades ? ` (${numActividades})` : ''}`)}
             </div>
-            <div className="mt-4 flex flex-wrap items-center gap-4">
-              <button className="btn" onClick={guardar} disabled={guardando || sucios.size === 0 || invalidas}>
-                {guardando ? 'Guardando…' : 'Guardar notas'}
-              </button>
-              {invalidas && <p className="text-sm text-alerta">Hay notas fuera de la escala 0,0 a 5,0.</p>}
-              {mensaje && <p className={`text-sm ${mensaje.tipo === 'error' ? 'text-alerta' : 'text-green-700'}`}>{mensaje.texto}</p>}
-            </div>
-          </>
-        )
-      )}
+            <label className="mb-2 flex items-center gap-2 text-sm">
+              Ordenar por
+              <select className="campo w-auto py-1" value={orden} onChange={(e) => setOrden(e.target.value)}>
+                <option value="apellidos">Apellidos</option>
+                <option value="nombres">Nombres</option>
+              </select>
+            </label>
+          </div>
+
+          {vista === 'actividades' ? (
+            <Actividades cohorteId={Number(sel.cohorte)} espacio={espacio} estudiantes={estudiantes} orden={orden}
+              perfil={perfil} alGuardar={cargar} />
+          ) : (
+            <>
+              <label className="mb-3 flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={sobrescribir} onChange={(e) => setSobrescribir(e.target.checked)} />
+                Al copiar a todos, reemplazar también las notas ya escritas
+              </label>
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <table className="w-full min-w-[720px] text-sm">
+                  <caption className="bg-tinta px-4 py-2 text-left font-serif text-base font-semibold text-white">
+                    {espacio.etiqueta} · {espacio.nombre}
+                  </caption>
+                  <thead className="bg-cielo">
+                    <tr>
+                      <th className="p-2 text-left">Estudiante</th>
+                      {CAMPOS.map(([k, t]) => (
+                        <th key={k} className="p-2">
+                          {t}
+                          {k === 'contenidos' && contenidosBloqueado && <span className="block text-xs font-normal text-mariano">de actividades</span>}
+                        </th>
+                      ))}
+                      <th className="p-2">Definitiva</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-t border-slate-200 bg-slate-50">
+                      <td className="p-2 text-xs font-semibold text-slate-600">Copiar a todos</td>
+                      {CAMPOS.map(([k, t]) => (
+                        <td key={k} className="p-2 text-center">
+                          {k === 'contenidos' && contenidosBloqueado ? (
+                            <span className="text-xs text-slate-400">Automático</span>
+                          ) : (
+                            <div className="flex items-center justify-center gap-1">
+                              <input className="nota w-14" inputMode="decimal" aria-label={`Nota para copiar en ${t}`}
+                                value={copia[k] ?? ''} onChange={(e) => setCopia({ ...copia, [k]: e.target.value })} />
+                              <button className="text-xs font-semibold text-mariano underline" onClick={() => aplicarATodos(k)}>Aplicar</button>
+                            </div>
+                          )}
+                        </td>
+                      ))}
+                      <td />
+                    </tr>
+                    {estudiantes.map((est) => {
+                      const v = valores[est.id] ?? {}
+                      const d = definitiva(Object.fromEntries(CAMPOS.map(([k]) => [k, parsearNota(v[k] ?? '') ?? null])))
+                      return (
+                        <tr key={est.id} className={`border-t border-slate-100 ${sucios.has(est.id) ? 'bg-amber-50' : ''}`}>
+                          <td className="p-2 font-medium">{mostrarNombre(est, orden)}</td>
+                          {CAMPOS.map(([k, t]) => {
+                            if (k === 'contenidos' && contenidosBloqueado) {
+                              return (
+                                <td key={k} className="p-2 text-center">
+                                  <span className="inline-block w-16 rounded bg-cielo px-2 py-1 text-center tabular-nums text-mariano"
+                                    title="Calculado con las actividades de contenidos">{v[k] || '—'}</span>
+                                </td>
+                              )
+                            }
+                            const mal = parsearNota(v[k] ?? '') === undefined
+                            return (
+                              <td key={k} className="p-2 text-center">
+                                <input inputMode="decimal" aria-label={`${t} de ${est.nombre_completo}`}
+                                  className={`nota ${mal ? 'border-alerta ring-1 ring-alerta' : ''}`}
+                                  value={v[k] ?? ''} onChange={(e) => cambiar(est.id, k, e.target.value)} />
+                              </td>
+                            )
+                          })}
+                          <td className={`p-2 text-center font-semibold tabular-nums ${d !== null && d < NOTA_MINIMA ? 'text-alerta' : ''}`}>{fmt(d)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-4">
+                <button className="btn" onClick={guardar} disabled={guardando || sucios.size === 0 || invalidas}>
+                  {guardando ? 'Guardando…' : 'Guardar notas'}
+                </button>
+                {invalidas && <p className="text-sm text-alerta">Hay notas fuera de la escala 0,0 a 5,0.</p>}
+                {mensaje && <p className={`text-sm ${mensaje.tipo === 'error' ? 'text-alerta' : 'text-green-700'}`}>{mensaje.texto}</p>}
+              </div>
+            </>
+          )}
+        </>
+      ))}
     </section>
   )
 }
