@@ -24,6 +24,7 @@ export default function ImportarNotas({ cohorteId, cohorteNombre, semestre, espa
   const [estudiantes, setEstudiantes] = useState([])
   const [existentes, setExistentes] = useState({}) // { estId: { espId: nota } }
   const [bloqueados, setBloqueados] = useState(new Set())
+  const [autoEnLinea, setAutoEnLinea] = useState(new Set())
   const [cargando, setCargando] = useState(true)
   const [hojas, setHojas] = useState(null) // [{ espacio, filas: [{ fila, doc, nombre, valores }] }]
   const [avisos, setAvisos] = useState([])
@@ -48,6 +49,8 @@ export default function ImportarNotas({ cohorteId, cohorteNombre, semestre, espa
       for (const n of ns) (mapa[n.estudiante_id] ??= {})[n.espacio_id] = n
     }
     const { data: acts } = await supabase.from('actividades').select('espacio_id').eq('cohorte_id', cohorteId).in('espacio_id', espIds)
+    const { data: autos } = await supabase.from('autoevaluaciones').select('espacio_id').eq('cohorte_id', cohorteId).in('espacio_id', espIds)
+    setAutoEnLinea(new Set((autos ?? []).map((a) => a.espacio_id)))
     setEstudiantes(ordenarEstudiantes(ests, orden))
     setExistentes(mapa)
     setBloqueados(new Set((acts ?? []).map((a) => a.espacio_id)))
@@ -55,13 +58,14 @@ export default function ImportarNotas({ cohorteId, cohorteNombre, semestre, espa
   }
   useEffect(() => { cargar(); setHojas(null); setAvisos([]); setMensaje(null) }, [cohorteId, semestre])
 
-  const camposDe = (espId) => CAMPOS.map(([k]) => k).filter((k) => !(k === 'contenidos' && bloqueados.has(espId)))
+  const camposDe = (espId) => CAMPOS.map(([k]) => k).filter((k) =>
+    !(k === 'contenidos' && bloqueados.has(espId)) && !(k === 'autoevaluacion' && autoEnLinea.has(espId)))
 
   function descargar() {
     const libro = XLSX.utils.book_new()
     for (const e of espaciosSem) {
       const encabezado = ['Documento', 'Nombre completo', ...CAMPOS.map(([k]) =>
-        k === 'contenidos' && bloqueados.has(e.id) ? 'Contenidos (automático)' : TITULOS[k])]
+        (k === 'contenidos' && bloqueados.has(e.id)) || (k === 'autoevaluacion' && autoEnLinea.has(e.id)) ? `${TITULOS[k]} (automático)` : TITULOS[k])]
       const filas = estudiantes.map((est) => {
         const n = existentes[est.id]?.[e.id]
         return [est.numero_id ?? '', est.nombre_completo, ...CAMPOS.map(([k]) => (n?.[k] ?? '') === '' ? '' : Number(n[k]))]
@@ -137,7 +141,7 @@ export default function ImportarNotas({ cohorteId, cohorteNombre, semestre, espa
       resumen.push(r)
     }
     return { resumen, cambios, errores }
-  }, [hojas, reemplazar, estudiantes, existentes, bloqueados])
+  }, [hojas, reemplazar, estudiantes, existentes, bloqueados, autoEnLinea])
 
   async function importar() {
     setTrabajando(true); setMensaje(null)
@@ -213,6 +217,7 @@ export default function ImportarNotas({ cohorteId, cohorteNombre, semestre, espa
                     <td className="p-2">
                       {r.espacio.etiqueta} · {r.espacio.nombre}
                       {bloqueados.has(r.espacio.id) && <span className="block text-xs text-mariano">Contenidos viene de actividades: esa columna se ignora</span>}
+                      {autoEnLinea.has(r.espacio.id) && <span className="block text-xs text-mariano">Autoevaluación es en línea: esa columna se ignora</span>}
                     </td>
                     <td className="p-2 tabular-nums text-green-700">{r.nuevas}</td>
                     <td className="p-2 tabular-nums">{r.reemplazos}</td>
