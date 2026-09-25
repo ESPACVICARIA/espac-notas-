@@ -19,6 +19,7 @@ export default function Digitacion({ perfil }) {
   const [orden, setOrden] = useState('apellidos')
   const [copia, setCopia] = useState({})
   const [sobrescribir, setSobrescribir] = useState(false)
+  const [notaVacias, setNotaVacias] = useState('')
   const [mensaje, setMensaje] = useState(null)
   const [guardando, setGuardando] = useState(false)
 
@@ -84,6 +85,26 @@ export default function Digitacion({ perfil }) {
     setMensaje(cambiados.length
       ? { tipo: 'ok', texto: `Copiado a ${cambiados.length} estudiante(s). Recuerda guardar.` }
       : { tipo: 'ok', texto: 'Todas las casillas ya tenían nota. Marca "reemplazar" si quieres sobrescribirlas.' })
+  }
+
+  // Llena todas las casillas vacías de la planilla (todas las columnas) sin tocar las que ya tienen nota
+  function llenarVacias() {
+    const texto = notaVacias.trim()
+    if (texto === '' || parsearNota(texto) === undefined) { setMensaje({ tipo: 'error', texto: 'Escribe una nota entre 0,0 y 5,0 para llenar las casillas vacías.' }); return }
+    let actuales = valores
+    const cambiados = new Set()
+    let casillas = 0
+    for (const [k] of camposEditables) {
+      for (const e of estudiantes) if (String(actuales[e.id]?.[k] ?? '').trim() === '') casillas++
+      const r = copiarColumna({ estudiantes, valores: actuales, campo: k, texto, sobrescribir: false })
+      actuales = r.nuevo
+      r.cambiados.forEach((id) => cambiados.add(id))
+    }
+    setValores(actuales)
+    setSucios((s) => { const n = new Set(s); cambiados.forEach((id) => n.add(id)); return n })
+    setMensaje(casillas
+      ? { tipo: 'ok', texto: `Se llenaron ${casillas} casilla(s) vacía(s) con ${texto}. Las notas que ya estaban no se tocaron. Recuerda guardar.` }
+      : { tipo: 'ok', texto: 'No había casillas vacías.' })
   }
 
   const camposEditables = CAMPOS.filter(([k]) => !(k === 'contenidos' && contenidosBloqueado))
@@ -165,9 +186,20 @@ export default function Digitacion({ perfil }) {
               perfil={perfil} alGuardar={cargar} />
           ) : (
             <>
+              <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                <span className="text-sm font-semibold">Llenar todas las casillas vacías con</span>
+                <input className="nota" inputMode="decimal" aria-label="Nota para las casillas vacías" placeholder="5,0"
+                  value={notaVacias} onChange={(e) => setNotaVacias(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && llenarVacias()} />
+                <button className="btn-sec py-1" onClick={llenarVacias}>Llenar vacías</button>
+                <span className="text-xs text-slate-500">
+                  Aplica a todas las columnas{contenidosBloqueado ? ' menos Contenidos' : ''}. Las notas ya escritas se respetan.
+                </span>
+              </div>
               <label className="mb-3 flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={sobrescribir} onChange={(e) => setSobrescribir(e.target.checked)} />
-                Al copiar a todos, reemplazar también las notas ya escritas
+                En "Copiar a todos" por columna, reemplazar también las notas ya escritas
+                <span className="text-xs text-slate-500">(si no lo marcas, solo se llenan las vacías)</span>
               </label>
               <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                 <table className="w-full min-w-[720px] text-sm">
