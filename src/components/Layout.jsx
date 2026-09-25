@@ -14,7 +14,7 @@ export default function Layout({ perfil, children }) {
           <p className="font-serif text-xl font-semibold leading-tight">Proceso de ESPAC Notas</p>
           <p className="mt-1 text-xs text-blue-200">Escuela Parroquial de Catequistas · Diócesis de Engativá</p>
         </div>
-        <nav className="flex gap-1 md:flex-col">
+        <nav className="flex flex-wrap gap-1 md:flex-col">
           <NavLink to="/" end className={enlace}>Estudiantes</NavLink>
           {perfil?.rol !== 'estudiante' && <NavLink to="/notas" className={enlace}>Digitar notas</NavLink>}
           {perfil?.rol === 'admin' && <NavLink to="/importar" className={enlace}>Importar</NavLink>}
