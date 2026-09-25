@@ -28,7 +28,7 @@ export function Camino({ semestres }) {
   )
 }
 
-export function TablasSemestres({ semestres, notas }) {
+export function TablasSemestres({ semestres, notas, formadores = {} }) {
   return (
     <div className="space-y-8">
       {semestres.map(({ s, items, prom }) => (
@@ -57,7 +57,12 @@ export function TablasSemestres({ semestres, notas }) {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-200">
-                <td colSpan={5} className="p-2 text-right font-medium">Promedio</td>
+                <td colSpan={5} className="p-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm"><span className="text-slate-500">Formador:</span> <strong>{formadores[s] || 'Sin asignar'}</strong></span>
+                    <span className="font-medium">Promedio</span>
+                  </div>
+                </td>
                 <td className="p-2 text-center font-serif text-lg font-semibold tabular-nums">{fmt(prom)}</td>
               </tr>
             </tfoot>
