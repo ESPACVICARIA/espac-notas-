@@ -14,6 +14,7 @@ export default function Actividades({ cohorteId, espacio, estudiantes, orden, pe
   const [valores, setValores] = useState({}) // { estId: { clave: texto } }
   const [copia, setCopia] = useState({})
   const [sobrescribir, setSobrescribir] = useState(false)
+  const [notaVacias, setNotaVacias] = useState('')
   const [cambios, setCambios] = useState(false)
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
@@ -56,6 +57,20 @@ export default function Actividades({ cohorteId, espacio, estudiantes, orden, pe
     const { nuevo, cambiados } = copiarColumna({ estudiantes, valores, campo: clave, texto, sobrescribir })
     setValores(nuevo)
     if (cambiados.length) marcar()
+  }
+
+  function llenarVacias() {
+    const texto = notaVacias.trim()
+    if (texto === '' || parsearNota(texto) === undefined) { setMensaje({ tipo: 'error', texto: 'Escribe una nota entre 0,0 y 5,0 para llenar las casillas vacías.' }); return }
+    let actuales = valores
+    let casillas = 0
+    for (const a of acts) {
+      for (const e of estudiantes) if (String(actuales[e.id]?.[a.clave] ?? '').trim() === '') casillas++
+      actuales = copiarColumna({ estudiantes, valores: actuales, campo: a.clave, texto, sobrescribir: false }).nuevo
+    }
+    setValores(actuales)
+    if (casillas) marcar()
+    setMensaje({ tipo: 'ok', texto: casillas ? `Se llenaron ${casillas} casilla(s) vacía(s). Recuerda guardar.` : 'No había casillas vacías.' })
   }
 
   const sumaPesos = acts.reduce((s, a) => s + (leerPeso(a.peso) || 0), 0)
@@ -160,9 +175,18 @@ export default function Actividades({ cohorteId, espacio, estudiantes, orden, pe
 
       {acts.length > 0 && (
         <>
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
+            <span className="text-sm font-semibold">Llenar todas las casillas vacías con</span>
+            <input className="nota" inputMode="decimal" aria-label="Nota para las casillas vacías" placeholder="5,0"
+              value={notaVacias} onChange={(e) => setNotaVacias(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && llenarVacias()} />
+            <button className="btn-sec py-1" onClick={llenarVacias}>Llenar vacías</button>
+            <span className="text-xs text-slate-500">Las notas ya escritas se respetan.</span>
+          </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={sobrescribir} onChange={(e) => setSobrescribir(e.target.checked)} />
-            Al copiar a todos, reemplazar también las notas ya escritas
+            En "Copiar a todos" por columna, reemplazar también las notas ya escritas
+            <span className="text-xs text-slate-500">(si no lo marcas, solo se llenan las vacías)</span>
           </label>
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
             <table className="w-full text-sm">
