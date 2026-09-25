@@ -15,7 +15,7 @@ export default function Imprimir() {
     (async () => {
       const [{ data: e }, { data: esp }, { data: ns }] = await Promise.all([
         supabase.from('estudiantes').select('*, cohortes(nombre)').eq('id', id).single(),
-        supabase.from('espacios').select('*').order('id'),
+        supabase.from('espacios').select('*').order('semestre').order('orden').order('id'),
         supabase.from('notas').select('*').eq('estudiante_id', id),
       ])
       setEst(e); setEspacios(esp ?? [])
