@@ -37,7 +37,7 @@ export default function Ficha({ perfil }) {
   const datos = [
     ['Documento', `${est.tipo_id ?? ''} ${est.numero_id ?? ''}`], ['Parroquia', est.parroquia], ['Centro de formación', est.centro_formacion],
     ['Cohorte', est.cohortes?.nombre], ['Fecha de matrícula', fecha(est.fecha_matricula)], ['Nacimiento', `${est.lugar_nacimiento ?? '—'}, ${fecha(est.fecha_nacimiento)}`],
-    ['Dirección', est.direccion], ['Barrio', est.barrio], ['Teléfono', est.telefono], ['Ocupación', est.ocupacion],
+    ['Dirección', est.direccion], ['Barrio', est.barrio], ['Teléfono', est.telefono], ['Correo electrónico', est.correo], ['Ocupación', est.ocupacion],
     ['Nivel escolar', est.nivel_escolar], ['Estudio universitario o técnico', est.estudio_superior], ['Estado', est.estado], ['Observaciones', est.observaciones],
   ]
 
