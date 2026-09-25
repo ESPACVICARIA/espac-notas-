@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { fmt } from '../lib/notas'
 import { resumen, Camino, TablasSemestres } from '../components/Itinerario'
@@ -8,6 +8,7 @@ const fecha = (f) => (f ? new Date(f + 'T00:00').toLocaleDateString('es-CO', { d
 
 export default function Ficha({ perfil }) {
   const { id } = useParams()
+  const navigate = useNavigate()
   const admin = perfil?.rol === 'admin'
   const [est, setEst] = useState(null)
   const [espacios, setEspacios] = useState([])
@@ -28,6 +29,14 @@ export default function Ficha({ perfil }) {
     setAviso(error
       ? { tipo: 'error', texto: `No se pudo restablecer: ${error.message}` }
       : { tipo: 'ok', texto: 'Contraseña restablecida. Ahora es su número de documento y deberá cambiarla al entrar.' })
+  }
+
+  async function eliminar() {
+    const ok = confirm(`¿Eliminar a ${est.nombre_completo}?\n\nSe borrarán también todas sus notas y su acceso al portal. Esta acción no se puede deshacer.\n\nSi solo dejó de asistir, es mejor marcarlo como "Retirado" en su hoja de vida.`)
+    if (!ok) return
+    const { error } = await supabase.from('estudiantes').delete().eq('id', id)
+    if (error) setAviso({ tipo: 'error', texto: `No se pudo eliminar: ${error.message}` })
+    else navigate('/')
   }
 
   if (!est) return <p className="text-slate-500">Cargando…</p>
@@ -56,6 +65,7 @@ export default function Ficha({ perfil }) {
           </div>
           {admin && <Link to={`/estudiantes/${id}/editar`} className="btn-sec">Editar</Link>}
           {admin && <button onClick={restablecer} className="btn-sec">Restablecer contraseña</button>}
+          {admin && <button onClick={eliminar} className="inline-flex items-center rounded-md border border-alerta px-4 py-2 text-sm font-semibold text-alerta hover:bg-red-50">Eliminar</button>}
         </div>
       </div>
 
