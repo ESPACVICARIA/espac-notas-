@@ -3,12 +3,14 @@ import { CAMPOS, definitiva, promedio, fmt, NOTA_MINIMA } from '../lib/notas'
 // Agrupa los 24 espacios en 4 semestres con su promedio
 export function resumen(espacios, notas) {
   const semestres = [1, 2, 3, 4].map((s) => {
-    const items = espacios.filter((e) => e.semestre === s)
+    const items = espacios.filter((e) => e.semestre === s && (e.activo !== false || notas[e.id]))
+      .sort((a, b) => a.orden - b.orden || a.id - b.id)
     return {
       s,
       items,
       prom: promedio(items.map((e) => definitiva(notas[e.id]))),
       completos: items.filter((e) => definitiva(notas[e.id]) !== null).length,
+      total: items.length,
     }
   })
   return { semestres, general: promedio(semestres.map((x) => x.prom)) }
@@ -17,11 +19,11 @@ export function resumen(espacios, notas) {
 export function Camino({ semestres }) {
   return (
     <ol className="mb-8 grid grid-cols-4 gap-2">
-      {semestres.map(({ s, prom, completos }) => (
+      {semestres.map(({ s, prom, completos, total }) => (
         <li key={s}>
-          <div className={`h-2 rounded-full ${completos === 6 ? 'bg-oro' : completos > 0 ? 'bg-mariano' : 'bg-slate-200'}`} />
+          <div className={`h-2 rounded-full ${total > 0 && completos === total ? 'bg-oro' : completos > 0 ? 'bg-mariano' : 'bg-slate-200'}`} />
           <p className="mt-2 text-sm font-semibold">Semestre {s}</p>
-          <p className="text-xs text-slate-500">{completos}/6 espacios · {fmt(prom)}</p>
+          <p className="text-xs text-slate-500">{completos}/{total} espacios · {fmt(prom)}</p>
         </li>
       ))}
     </ol>
