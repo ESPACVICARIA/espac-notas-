@@ -12,6 +12,7 @@ export default function Configuracion() {
   const [selUsuarios, setSelUsuarios] = useState(new Set())
   const [aviso, setAviso] = useState('')
   const [editando, setEditando] = useState(null) // { id, nombre, anio }
+  const [nombreEdit, setNombreEdit] = useState(null) // { id, nombre }
 
   async function cargar() {
     const { data: s } = await supabase.auth.getSession()
@@ -40,6 +41,12 @@ export default function Configuracion() {
     )
     if (!ok) return
     ejecutar(supabase.from('cohortes').delete().eq('id', c.id))
+  }
+
+  async function guardarNombre() {
+    if (!nombreEdit.nombre.trim()) { setError('Escribe el nombre como debe aparecer.'); return }
+    await ejecutar(supabase.from('perfiles').update({ nombre: nombreEdit.nombre.trim() }).eq('id', nombreEdit.id))
+    setNombreEdit(null)
   }
 
   function alternarUsuario(id) {
@@ -104,7 +111,10 @@ export default function Configuracion() {
 
       <div>
         <h2 className="mb-1 text-xl font-semibold">Usuarios y roles</h2>
-        <p className="mb-3 text-sm text-slate-500">Para dar acceso a un formador, créale el usuario en Supabase (Authentication, Add user) y luego asígnale el rol aquí.</p>
+        <p className="mb-3 text-sm text-slate-500">
+          Para dar acceso a un formador, créale el usuario en Supabase (Authentication, Add user) y luego asígnale el rol aquí.
+          El nombre es el que aparece en planillas, itinerarios y PDF: escríbelo con su título, por ejemplo "Pbro. Juan Pérez" o "Diác. Germán Velandia".
+        </p>
         {aviso && <p className="mb-3 text-sm text-green-700">{aviso}</p>}
         {selUsuarios.size > 0 && (
           <div className="mb-3 flex items-center gap-3">
@@ -126,7 +136,20 @@ export default function Configuracion() {
                       checked={selUsuarios.has(p.id)} onChange={() => alternarUsuario(p.id)} />
                   </td>
                   <td className="py-2">
-                    {p.nombre} {esYo && <span className="text-xs text-oro">(tú)</span>}
+                    {nombreEdit?.id === p.id ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input className="campo max-w-xs" autoFocus value={nombreEdit.nombre}
+                          onChange={(e) => setNombreEdit({ ...nombreEdit, nombre: e.target.value })}
+                          onKeyDown={(e) => e.key === 'Enter' && guardarNombre()} />
+                        <button className="btn py-1" onClick={guardarNombre}>Guardar</button>
+                        <button className="text-sm text-slate-500 underline" onClick={() => setNombreEdit(null)}>Cancelar</button>
+                      </div>
+                    ) : (
+                      <>
+                        {p.nombre} {esYo && <span className="text-xs text-oro">(tú)</span>}{' '}
+                        <button className="text-xs text-mariano underline" onClick={() => setNombreEdit({ id: p.id, nombre: p.nombre ?? '' })}>Cambiar nombre</button>
+                      </>
+                    )}
                     <br /><span className="text-xs text-slate-500">{p.correo}</span>
                   </td>
                   <td className="py-2 text-right">
