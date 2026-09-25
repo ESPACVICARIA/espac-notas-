@@ -38,3 +38,4 @@ Copia `.env.example` a `.env` con esos dos valores y ejecuta `npm run dev`.
 2. En Environment Variables agrega `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 3. Deploy. Cada `git push` a `main` vuelve a publicar automáticamente.
 4. En Supabase > Authentication > URL Configuration pon la URL de Vercel como Site URL.
+5. Versión 1
