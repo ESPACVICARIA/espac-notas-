@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { resumen, Camino, TablasSemestres } from '../components/Itinerario'
 import { fmt } from '../lib/notas'
+import Logos from '../components/Logos'
 
 function CambioClave({ documento, clave, alCambiar }) {
   const [nueva, setNueva] = useState('')
@@ -48,13 +49,16 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave }) {
 
   return (
     <div className="min-h-screen">
-      <header className="bg-tinta text-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 p-5">
-          <div>
-            <p className="font-serif text-lg font-semibold">Proceso de ESPAC Notas</p>
-            <p className="text-xs text-blue-200">Escuela Parroquial de Catequistas · Diócesis de Engativá</p>
+      <header className="border-b-4 border-tinta bg-white">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 p-5">
+          <div className="flex items-center gap-4">
+            <Logos tamano="sm" />
+            <div>
+              <p className="font-serif text-lg font-semibold">Proceso de ESPAC Notas</p>
+              <p className="text-xs text-slate-500">Escuela Parroquial de Catequistas · Diócesis de Engativá</p>
+            </div>
           </div>
-          <button onClick={salir} className="text-sm text-blue-100 underline hover:text-white">Salir</button>
+          <button onClick={salir} className="text-sm text-mariano underline hover:text-tinta">Salir</button>
         </div>
       </header>
 
