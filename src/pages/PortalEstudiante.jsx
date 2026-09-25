@@ -73,7 +73,7 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave }) {
               <button onClick={() => setImprimiendo(false)} className="text-sm text-mariano hover:underline">Volver a mis notas</button>
             </BarraImpresion>
             <div className="overflow-x-auto print:overflow-visible">
-              <HojaItinerario est={est ?? {}} espacios={datos.espacios ?? []} notas={notas} />
+              <HojaItinerario est={est ?? {}} espacios={datos.espacios ?? []} notas={notas} formadores={datos.formadores ?? {}} />
             </div>
           </>
         ) : (
@@ -92,7 +92,7 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave }) {
               </div>
             </div>
             <Camino semestres={semestres} />
-            <TablasSemestres semestres={semestres} notas={notas} />
+            <TablasSemestres semestres={semestres} notas={notas} formadores={datos.formadores ?? {}} />
           </>
         )}
       </main>
