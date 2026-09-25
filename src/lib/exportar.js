@@ -24,7 +24,7 @@ export async function exportarEstudiantes(ids) {
     estudiantes.push(...await traerTodo(() => supabase.from('estudiantes').select('*, cohortes(nombre)').in('id', lote)))
     notas.push(...await traerTodo(() => supabase.from('notas').select('*').in('estudiante_id', lote)))
   }
-  const { data: espacios } = await supabase.from('espacios').select('*').order('id')
+  const { data: espacios } = await supabase.from('espacios').select('*').order('semestre').order('orden').order('id')
   estudiantes.sort((a, b) => a.nombre_completo.localeCompare(b.nombre_completo, 'es'))
 
   const notasDe = {}
