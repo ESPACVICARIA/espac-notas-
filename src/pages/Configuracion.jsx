@@ -8,8 +8,13 @@ export default function Configuracion() {
   const [nueva, setNueva] = useState({ nombre: '', anio: new Date().getFullYear() })
   const [asig, setAsig] = useState({ formador_id: '', cohorte_id: '', semestre: '1' })
   const [error, setError] = useState('')
+  const [yo, setYo] = useState(null)
+  const [selUsuarios, setSelUsuarios] = useState(new Set())
+  const [aviso, setAviso] = useState('')
 
   async function cargar() {
+    const { data: s } = await supabase.auth.getSession()
+    setYo(s.session?.user.id ?? null)
     const [c, p, a] = await Promise.all([
       supabase.from('cohortes').select('*').order('anio', { ascending: false }),
       supabase.from('perfiles').select('*').order('nombre'),
@@ -18,6 +23,25 @@ export default function Configuracion() {
     setCohortes(c.data ?? []); setPerfiles(p.data ?? []); setAsignaciones(a.data ?? [])
   }
   useEffect(() => { cargar() }, [])
+
+  function alternarUsuario(id) {
+    setSelUsuarios((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  async function eliminarUsuarios(ids) {
+    const nombres = perfiles.filter((p) => ids.includes(p.id)).map((p) => p.nombre).join(', ')
+    const ok = confirm(
+      `¿Eliminar ${ids.length === 1 ? 'este usuario' : `${ids.length} usuarios`}?\n\n${nombres}\n\n` +
+      'Perderán el acceso a la plataforma y se quitarán sus asignaciones. Las notas que digitaron se conservan. Esta acción no se puede deshacer.'
+    )
+    if (!ok) return
+    setError(''); setAviso('')
+    const { data, error } = await supabase.rpc('eliminar_usuarios', { p_ids: ids })
+    if (error) setError(error.message)
+    else setAviso(`${data} usuario(s) eliminados.`)
+    setSelUsuarios(new Set())
+    cargar()
+  }
 
   const ejecutar = async (promesa) => { setError(''); const { error } = await promesa; if (error) setError(error.message); else cargar() }
 
@@ -39,18 +63,44 @@ export default function Configuracion() {
       <div>
         <h2 className="mb-1 text-xl font-semibold">Usuarios y roles</h2>
         <p className="mb-3 text-sm text-slate-500">Para dar acceso a un formador, créale el usuario en Supabase (Authentication, Add user) y luego asígnale el rol aquí.</p>
+        {aviso && <p className="mb-3 text-sm text-green-700">{aviso}</p>}
+        {selUsuarios.size > 0 && (
+          <div className="mb-3 flex items-center gap-3">
+            <button onClick={() => eliminarUsuarios([...selUsuarios])}
+              className="inline-flex items-center rounded-md bg-alerta px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              Eliminar {selUsuarios.size} seleccionado(s)
+            </button>
+            <button onClick={() => setSelUsuarios(new Set())} className="text-sm text-slate-500 underline">Quitar selección</button>
+          </div>
+        )}
         <table className="w-full text-sm">
           <tbody>
-            {perfiles.map((p) => (
-              <tr key={p.id} className="border-t border-slate-100">
-                <td className="py-2">{p.nombre}<br /><span className="text-xs text-slate-500">{p.correo}</span></td>
-                <td className="py-2 text-right">
-                  <select className="campo w-40" value={p.rol} onChange={(e) => ejecutar(supabase.from('perfiles').update({ rol: e.target.value }).eq('id', p.id))}>
-                    <option value="admin">Coordinación</option><option value="formador">Formador</option><option value="estudiante">Estudiante</option>
-                  </select>
-                </td>
-              </tr>
-            ))}
+            {perfiles.map((p) => {
+              const esYo = p.id === yo
+              return (
+                <tr key={p.id} className={`border-t border-slate-100 ${selUsuarios.has(p.id) ? 'bg-red-50' : ''}`}>
+                  <td className="w-10 py-2">
+                    <input type="checkbox" disabled={esYo} aria-label={`Seleccionar a ${p.nombre}`}
+                      checked={selUsuarios.has(p.id)} onChange={() => alternarUsuario(p.id)} />
+                  </td>
+                  <td className="py-2">
+                    {p.nombre} {esYo && <span className="text-xs text-oro">(tú)</span>}
+                    <br /><span className="text-xs text-slate-500">{p.correo}</span>
+                  </td>
+                  <td className="py-2 text-right">
+                    <div className="flex items-center justify-end gap-3">
+                      <select className="campo w-40" value={p.rol} disabled={esYo}
+                        onChange={(e) => ejecutar(supabase.from('perfiles').update({ rol: e.target.value }).eq('id', p.id))}>
+                        <option value="admin">Coordinación</option><option value="formador">Formador</option><option value="estudiante">Estudiante</option>
+                      </select>
+                      {!esYo && (
+                        <button onClick={() => eliminarUsuarios([p.id])} className="text-xs font-semibold text-alerta underline">Eliminar</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
