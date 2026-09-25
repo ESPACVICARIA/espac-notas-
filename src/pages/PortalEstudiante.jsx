@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { resumen, Camino, TablasSemestres } from '../components/Itinerario'
 import { fmt } from '../lib/notas'
 import Logos from '../components/Logos'
+import { HojaItinerario, BarraImpresion } from '../components/Documentos'
 
 function CambioClave({ documento, clave, alCambiar }) {
   const [nueva, setNueva] = useState('')
@@ -43,13 +44,14 @@ function CambioClave({ documento, clave, alCambiar }) {
 
 export default function PortalEstudiante({ acceso, salir, alCambiarClave }) {
   const { datos, documento, clave } = acceso
+  const [imprimiendo, setImprimiendo] = useState(false)
   const est = datos.estudiante
   const notas = Object.fromEntries((datos.notas ?? []).map((n) => [n.espacio_id, n]))
   const { semestres, general } = resumen(datos.espacios ?? [], notas)
 
   return (
     <div className="min-h-screen">
-      <header className="border-b-4 border-tinta bg-white">
+      <header className="border-b-4 border-tinta bg-white print:hidden">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 p-5">
           <div className="flex items-center gap-4">
             <Logos tamano="sm" />
@@ -62,9 +64,18 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl p-5 md:p-10">
+      <main className="mx-auto max-w-5xl p-5 md:p-10 print:max-w-none print:p-0">
         {datos.debe_cambiar ? (
           <CambioClave documento={documento} clave={clave} alCambiar={alCambiarClave} />
+        ) : imprimiendo ? (
+          <>
+            <BarraImpresion>
+              <button onClick={() => setImprimiendo(false)} className="text-sm text-mariano hover:underline">Volver a mis notas</button>
+            </BarraImpresion>
+            <div className="overflow-x-auto print:overflow-visible">
+              <HojaItinerario est={est ?? {}} espacios={datos.espacios ?? []} notas={notas} />
+            </div>
+          </>
         ) : (
           <>
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -72,9 +83,12 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave }) {
                 <h1 className="text-3xl font-semibold">{est?.nombre_completo}</h1>
                 <p className="text-sm text-slate-500">{[est?.parroquia, est?.cohorte].filter(Boolean).join(' · ')}</p>
               </div>
-              <div className="text-right">
-                <p className="font-serif text-4xl font-semibold tabular-nums">{fmt(general)}</p>
-                <p className="text-xs text-slate-500">Promedio del itinerario</p>
+              <div className="flex items-center gap-4">
+                <button onClick={() => setImprimiendo(true)} className="btn-sec">Descargar PDF</button>
+                <div className="text-right">
+                  <p className="font-serif text-4xl font-semibold tabular-nums">{fmt(general)}</p>
+                  <p className="text-xs text-slate-500">Promedio del itinerario</p>
+                </div>
               </div>
             </div>
             <Camino semestres={semestres} />
