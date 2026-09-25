@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { exportarEstudiantes } from '../lib/exportar'
 
 export default function Estudiantes({ perfil }) {
   const admin = perfil?.rol === 'admin'
@@ -10,6 +11,7 @@ export default function Estudiantes({ perfil }) {
   const [sel, setSel] = useState(new Set())
   const [aviso, setAviso] = useState(null)
   const [eliminando, setEliminando] = useState(false)
+  const [exportando, setExportando] = useState(false)
 
   async function cargar() {
     const { data } = await supabase.from('estudiantes')
@@ -35,6 +37,18 @@ export default function Estudiantes({ perfil }) {
       filtrados.forEach((e) => (todosMarcados ? n.delete(e.id) : n.add(e.id)))
       return n
     })
+  }
+
+  async function exportar() {
+    const ids = sel.size ? [...sel] : filtrados.map((e) => e.id)
+    setExportando(true); setAviso(null)
+    try {
+      const total = await exportarEstudiantes(ids)
+      setAviso({ tipo: 'ok', texto: `Excel descargado con ${total} estudiante(s).` })
+    } catch (e) {
+      setAviso({ tipo: 'error', texto: `No se pudo exportar: ${e.message}` })
+    }
+    setExportando(false)
   }
 
   async function eliminar() {
@@ -72,6 +86,11 @@ export default function Estudiantes({ perfil }) {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <input className="campo max-w-md" placeholder="Buscar por nombre o documento"
           value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+        {filtrados.length > 0 && (
+          <button onClick={exportar} disabled={exportando} className="btn-sec">
+            {exportando ? 'Preparando Excel…' : sel.size ? `Exportar ${sel.size} a Excel` : `Exportar ${filtrados.length} a Excel`}
+          </button>
+        )}
         {admin && sel.size > 0 && (
           <>
             <button onClick={eliminar} disabled={eliminando}
