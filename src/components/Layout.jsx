@@ -17,6 +17,7 @@ export default function Layout({ perfil, children }) {
         <nav className="flex gap-1 md:flex-col">
           <NavLink to="/" end className={enlace}>Estudiantes</NavLink>
           {perfil?.rol !== 'estudiante' && <NavLink to="/notas" className={enlace}>Digitar notas</NavLink>}
+          {perfil?.rol === 'admin' && <NavLink to="/importar" className={enlace}>Importar</NavLink>}
           {perfil?.rol === 'admin' && <NavLink to="/configuracion" className={enlace}>Configuración</NavLink>}
         </nav>
         <div className="mt-8 text-sm md:mt-auto">
