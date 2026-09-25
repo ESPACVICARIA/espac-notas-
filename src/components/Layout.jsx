@@ -19,12 +19,13 @@ export default function Layout({ perfil, children }) {
         <nav className="flex flex-wrap gap-1 md:flex-col">
           <NavLink to="/" end className={enlace}>Estudiantes</NavLink>
           {perfil?.rol !== 'estudiante' && <NavLink to="/notas" className={enlace}>Digitar notas</NavLink>}
+          {perfil?.rol !== 'estudiante' && <NavLink to="/documentos" className={enlace}>Documentos</NavLink>}
           {perfil?.rol === 'admin' && <NavLink to="/importar" className={enlace}>Importar</NavLink>}
           {perfil?.rol === 'admin' && <NavLink to="/modulos" className={enlace}>Módulos</NavLink>}
           {perfil?.rol === 'admin' && <NavLink to="/configuracion" className={enlace}>Configuración</NavLink>}
         </nav>
         <div className="mt-8 text-sm md:mt-auto">
-          <p className="truncate text-blue-100">{perfil?.nombre}</p>
+          <p className="truncate text-blue-100">{perfil?.nombre || perfil?.correo}</p>
           <p className="text-xs text-oro">{ROLES[perfil?.rol]}</p>
           <button onClick={() => supabase.auth.signOut()} className="mt-3 text-xs text-blue-200 underline hover:text-white">
             Cerrar sesión
