@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
+const GRUPOS = [
+  ['admin', 'Coordinación y administración', 'Acceso completo: estudiantes, módulos, importaciones y configuración.'],
+  ['formador', 'Docentes (formadores)', 'Digitan notas solo en las cohortes y semestres que tengan asignados.'],
+  ['estudiante', 'Cuentas de estudiante', 'Cuentas creadas en Supabase sin rol de trabajo. Los estudiantes del portal entran con su documento y no necesitan cuenta aquí.'],
+]
+
 export default function Configuracion() {
   const [cohortes, setCohortes] = useState([])
   const [perfiles, setPerfiles] = useState([])
@@ -20,7 +26,7 @@ export default function Configuracion() {
     const [c, p, a] = await Promise.all([
       supabase.from('cohortes').select('*, estudiantes(count)').order('anio', { ascending: false }),
       supabase.from('perfiles').select('*').order('nombre'),
-      supabase.from('asignaciones').select('*, perfiles(nombre), cohortes(nombre)').order('semestre'),
+      supabase.from('asignaciones').select('*, perfiles(nombre, correo), cohortes(nombre)').order('semestre'),
     ])
     setCohortes(c.data ?? []); setPerfiles(p.data ?? []); setAsignaciones(a.data ?? [])
   }
@@ -54,7 +60,7 @@ export default function Configuracion() {
   }
 
   async function eliminarUsuarios(ids) {
-    const nombres = perfiles.filter((p) => ids.includes(p.id)).map((p) => p.nombre).join(', ')
+    const nombres = perfiles.filter((p) => ids.includes(p.id)).map((p) => p.nombre || p.correo).join(', ')
     const ok = confirm(
       `¿Eliminar ${ids.length === 1 ? 'este usuario' : `${ids.length} usuarios`}?\n\n${nombres}\n\n` +
       'Perderán el acceso a la plataforma y se quitarán sus asignaciones. Las notas que digitaron se conservan. Esta acción no se puede deshacer.'
@@ -125,49 +131,81 @@ export default function Configuracion() {
             <button onClick={() => setSelUsuarios(new Set())} className="text-sm text-slate-500 underline">Quitar selección</button>
           </div>
         )}
-        <table className="w-full text-sm">
-          <tbody>
-            {perfiles.map((p) => {
-              const esYo = p.id === yo
-              return (
-                <tr key={p.id} className={`border-t border-slate-100 ${selUsuarios.has(p.id) ? 'bg-red-50' : ''}`}>
-                  <td className="w-10 py-2">
-                    <input type="checkbox" disabled={esYo} aria-label={`Seleccionar a ${p.nombre}`}
-                      checked={selUsuarios.has(p.id)} onChange={() => alternarUsuario(p.id)} />
-                  </td>
-                  <td className="py-2">
-                    {nombreEdit?.id === p.id ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <input className="campo max-w-xs" autoFocus value={nombreEdit.nombre}
-                          onChange={(e) => setNombreEdit({ ...nombreEdit, nombre: e.target.value })}
-                          onKeyDown={(e) => e.key === 'Enter' && guardarNombre()} />
-                        <button className="btn py-1" onClick={guardarNombre}>Guardar</button>
-                        <button className="text-sm text-slate-500 underline" onClick={() => setNombreEdit(null)}>Cancelar</button>
-                      </div>
-                    ) : (
-                      <>
-                        {p.nombre} {esYo && <span className="text-xs text-oro">(tú)</span>}{' '}
-                        <button className="text-xs text-mariano underline" onClick={() => setNombreEdit({ id: p.id, nombre: p.nombre ?? '' })}>Cambiar nombre</button>
-                      </>
-                    )}
-                    <br /><span className="text-xs text-slate-500">{p.correo}</span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      <select className="campo w-40" value={p.rol} disabled={esYo}
-                        onChange={(e) => ejecutar(supabase.from('perfiles').update({ rol: e.target.value }).eq('id', p.id))}>
-                        <option value="admin">Coordinación</option><option value="formador">Formador</option><option value="estudiante">Estudiante</option>
-                      </select>
-                      {!esYo && (
-                        <button onClick={() => eliminarUsuarios([p.id])} className="text-xs font-semibold text-alerta underline">Eliminar</button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <div className="space-y-6">
+          {GRUPOS.map(([rol, titulo, descripcion]) => {
+            const lista = perfiles.filter((p) => p.rol === rol)
+            const marcables = lista.filter((p) => p.id !== yo)
+            const todos = marcables.length > 0 && marcables.every((p) => selUsuarios.has(p.id))
+            return (
+              <div key={rol} className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-cielo px-4 py-2">
+                  <div>
+                    <h3 className="font-serif text-base font-semibold">{titulo} <span className="font-sans text-sm font-normal text-slate-500">({lista.length})</span></h3>
+                    <p className="text-xs text-slate-600">{descripcion}</p>
+                  </div>
+                  {marcables.length > 0 && (
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={todos} onChange={() => setSelUsuarios((sel) => {
+                        const n = new Set(sel)
+                        marcables.forEach((p) => (todos ? n.delete(p.id) : n.add(p.id)))
+                        return n
+                      })} />
+                      Seleccionar todos
+                    </label>
+                  )}
+                </div>
+                {lista.length === 0 ? (
+                  <p className="p-4 text-sm text-slate-500">No hay usuarios en este grupo.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {lista.map((p) => {
+                        const esYo = p.id === yo
+                        return (
+                        <tr key={p.id} className={`border-t border-slate-100 first:border-t-0 ${selUsuarios.has(p.id) ? 'bg-red-50' : ''}`}>
+                          <td className="w-10 py-2 pl-4">
+                            <input type="checkbox" disabled={esYo} aria-label={`Seleccionar a ${p.nombre}`}
+                              checked={selUsuarios.has(p.id)} onChange={() => alternarUsuario(p.id)} />
+                          </td>
+                          <td className="py-2">
+                            {nombreEdit?.id === p.id ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <input className="campo max-w-xs" autoFocus value={nombreEdit.nombre}
+                                  onChange={(e) => setNombreEdit({ ...nombreEdit, nombre: e.target.value })}
+                                  onKeyDown={(e) => e.key === 'Enter' && guardarNombre()} />
+                                <button className="btn py-1" onClick={guardarNombre}>Guardar</button>
+                                <button className="text-sm text-slate-500 underline" onClick={() => setNombreEdit(null)}>Cancelar</button>
+                              </div>
+                            ) : (
+                              <>
+                                {p.nombre || <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Falta el nombre</span>}{' '}
+                                {esYo && <span className="text-xs text-oro">(tú)</span>}{' '}
+                                <button className="text-xs text-mariano underline" onClick={() => setNombreEdit({ id: p.id, nombre: p.nombre ?? '' })}>Cambiar nombre</button>
+                              </>
+                            )}
+                            <br /><span className="text-xs text-slate-500">{p.correo}</span>
+                          </td>
+                          <td className="py-2 pr-4 text-right">
+                            <div className="flex items-center justify-end gap-3">
+                              <select className="campo w-40" value={p.rol} disabled={esYo}
+                                onChange={(e) => ejecutar(supabase.from('perfiles').update({ rol: e.target.value }).eq('id', p.id))}>
+                                <option value="admin">Coordinación</option><option value="formador">Docente (formador)</option><option value="estudiante">Estudiante</option>
+                              </select>
+                              {!esYo && (
+                                <button onClick={() => eliminarUsuarios([p.id])} className="text-xs font-semibold text-alerta underline">Eliminar</button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       <div>
@@ -176,7 +214,7 @@ export default function Configuracion() {
         <form className="mb-4 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); ejecutar(supabase.from('asignaciones').insert({ ...asig, semestre: Number(asig.semestre) })) }}>
           <select className="campo max-w-xs" required value={asig.formador_id} onChange={(e) => setAsig({ ...asig, formador_id: e.target.value })}>
             <option value="">Formador</option>
-            {perfiles.filter((p) => p.rol !== 'estudiante').map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            {perfiles.filter((p) => p.rol !== 'estudiante').map((p) => <option key={p.id} value={p.id}>{p.nombre || `${p.correo} (sin nombre)`}</option>)}
           </select>
           <select className="campo max-w-xs" required value={asig.cohorte_id} onChange={(e) => setAsig({ ...asig, cohorte_id: e.target.value })}>
             <option value="">Cohorte</option>
@@ -190,7 +228,7 @@ export default function Configuracion() {
         <ul className="text-sm">
           {asignaciones.map((a) => (
             <li key={a.id} className="flex items-center justify-between border-t border-slate-100 py-2">
-              <span>{a.perfiles?.nombre} · {a.cohortes?.nombre} · Semestre {a.semestre}</span>
+              <span>{a.perfiles?.nombre || <span className="text-amber-700">{a.perfiles?.correo} (sin nombre)</span>} · {a.cohortes?.nombre} · Semestre {a.semestre}</span>
               <button className="text-xs text-alerta underline" onClick={() => ejecutar(supabase.from('asignaciones').delete().eq('id', a.id))}>Quitar</button>
             </li>
           ))}
