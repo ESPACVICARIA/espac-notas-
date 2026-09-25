@@ -11,18 +11,36 @@ export default function Configuracion() {
   const [yo, setYo] = useState(null)
   const [selUsuarios, setSelUsuarios] = useState(new Set())
   const [aviso, setAviso] = useState('')
+  const [editando, setEditando] = useState(null) // { id, nombre, anio }
 
   async function cargar() {
     const { data: s } = await supabase.auth.getSession()
     setYo(s.session?.user.id ?? null)
     const [c, p, a] = await Promise.all([
-      supabase.from('cohortes').select('*').order('anio', { ascending: false }),
+      supabase.from('cohortes').select('*, estudiantes(count)').order('anio', { ascending: false }),
       supabase.from('perfiles').select('*').order('nombre'),
       supabase.from('asignaciones').select('*, perfiles(nombre), cohortes(nombre)').order('semestre'),
     ])
     setCohortes(c.data ?? []); setPerfiles(p.data ?? []); setAsignaciones(a.data ?? [])
   }
   useEffect(() => { cargar() }, [])
+
+  async function guardarCohorte() {
+    if (!editando.nombre.trim()) { setError('La cohorte necesita un nombre.'); return }
+    await ejecutar(supabase.from('cohortes').update({ nombre: editando.nombre.trim(), anio: editando.anio || null }).eq('id', editando.id))
+    setEditando(null)
+  }
+
+  async function eliminarCohorte(c) {
+    const total = c.estudiantes?.[0]?.count ?? 0
+    const ok = confirm(
+      `¿Eliminar la cohorte "${c.nombre}"?\n\n` +
+      (total ? `Sus ${total} estudiante(s) NO se borran: quedarán "Sin cohorte" y conservan sus notas.\n` : 'No tiene estudiantes.\n') +
+      'También se quitarán las asignaciones de formadores de esta cohorte.'
+    )
+    if (!ok) return
+    ejecutar(supabase.from('cohortes').delete().eq('id', c.id))
+  }
 
   function alternarUsuario(id) {
     setSelUsuarios((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -57,7 +75,31 @@ export default function Configuracion() {
           <input className="campo w-28" type="number" value={nueva.anio} onChange={(e) => setNueva({ ...nueva, anio: Number(e.target.value) })} />
           <button className="btn">Crear cohorte</button>
         </form>
-        <ul className="text-sm">{cohortes.map((c) => <li key={c.id} className="border-t border-slate-100 py-2">{c.nombre} <span className="text-slate-500">({c.anio})</span></li>)}</ul>
+        <ul className="text-sm">
+          {cohortes.map((c) => (
+            <li key={c.id} className="flex flex-wrap items-center gap-3 border-t border-slate-100 py-2">
+              {editando?.id === c.id ? (
+                <>
+                  <input className="campo max-w-xs" value={editando.nombre} autoFocus
+                    onChange={(e) => setEditando({ ...editando, nombre: e.target.value })}
+                    onKeyDown={(e) => e.key === 'Enter' && guardarCohorte()} />
+                  <input className="campo w-28" type="number" value={editando.anio ?? ''}
+                    onChange={(e) => setEditando({ ...editando, anio: e.target.value ? Number(e.target.value) : null })} />
+                  <button className="btn" onClick={guardarCohorte}>Guardar</button>
+                  <button className="text-sm text-slate-500 underline" onClick={() => setEditando(null)}>Cancelar</button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1">
+                    {c.nombre} <span className="text-slate-500">({c.anio ?? 'sin año'}) · {c.estudiantes?.[0]?.count ?? 0} estudiantes</span>
+                  </span>
+                  <button className="text-xs font-semibold text-mariano underline" onClick={() => setEditando({ id: c.id, nombre: c.nombre, anio: c.anio })}>Modificar</button>
+                  <button className="text-xs font-semibold text-alerta underline" onClick={() => eliminarCohorte(c)}>Eliminar</button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div>
