@@ -15,9 +15,16 @@ export default function Ficha({ perfil }) {
   const [notas, setNotas] = useState({})
   const [pestana, setPestana] = useState('itinerario')
   const [aviso, setAviso] = useState(null)
+  const [formadores, setFormadores] = useState({})
 
   useEffect(() => {
-    supabase.from('estudiantes').select('*, cohortes(nombre)').eq('id', id).single().then(({ data }) => setEst(data))
+    supabase.from('estudiantes').select('*, cohortes(nombre)').eq('id', id).single().then(async ({ data }) => {
+      setEst(data)
+      if (data?.cohorte_id) {
+        const { data: f } = await supabase.rpc('formadores_cohorte', { p_cohorte: data.cohorte_id })
+        setFormadores(f ?? {})
+      }
+    })
     supabase.from('espacios').select('*').order('id').then(({ data }) => setEspacios(data ?? []))
     supabase.from('notas').select('*').eq('estudiante_id', id)
       .then(({ data }) => setNotas(Object.fromEntries((data ?? []).map((n) => [n.espacio_id, n]))))
@@ -88,7 +95,7 @@ export default function Ficha({ perfil }) {
           ))}
         </dl>
       ) : (
-        <TablasSemestres semestres={semestres} notas={notas} />
+        <TablasSemestres semestres={semestres} notas={notas} formadores={formadores} />
       )}
     </section>
   )
