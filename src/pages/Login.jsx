@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import Logos from '../components/Logos'
 
 export default function Login({ onEstudiante }) {
   const [modo, setModo] = useState('estudiante')
@@ -35,8 +36,9 @@ export default function Login({ onEstudiante }) {
   return (
     <div className="grid min-h-screen place-items-center bg-tinta p-6">
       <form onSubmit={entrar} className="w-full max-w-sm rounded-xl bg-white p-8 shadow-xl">
-        <h1 className="text-2xl font-semibold">Proceso de ESPAC Notas</h1>
-        <p className="mt-1 mb-6 text-sm text-slate-500">Vicaría Episcopal Territorial N. Sra. del Rosario · Suba-Cota</p>
+        <Logos tamano="md" className="mb-6" />
+        <h1 className="text-center text-2xl font-semibold">Proceso de ESPAC Notas</h1>
+        <p className="mt-1 mb-6 text-center text-sm text-slate-500">Vicaría Episcopal Territorial N. Sra. del Rosario · Suba-Cota</p>
 
         <div className="mb-6 flex gap-1 rounded-lg bg-slate-100 p-1">
           {pestana('estudiante', 'Soy estudiante')}
