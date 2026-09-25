@@ -63,6 +63,7 @@ export default function Ficha({ perfil }) {
             <p className="font-serif text-4xl font-semibold tabular-nums">{fmt(general)}</p>
             <p className="text-xs text-slate-500">Promedio del itinerario</p>
           </div>
+          <Link to={`/estudiantes/${id}/imprimir`} className="btn-sec">Imprimir o PDF</Link>
           {admin && <Link to={`/estudiantes/${id}/editar`} className="btn-sec">Editar</Link>}
           {admin && <button onClick={restablecer} className="btn-sec">Restablecer contraseña</button>}
           {admin && <button onClick={eliminar} className="inline-flex items-center rounded-md border border-alerta px-4 py-2 text-sm font-semibold text-alerta hover:bg-red-50">Eliminar</button>}
