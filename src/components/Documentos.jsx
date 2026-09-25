@@ -113,7 +113,6 @@ function TablaSemestre({ s, espacios, notas, formador }) {
   const celda = (n, k) => (!n ? '' : fmt(n[k]))
   return (
     <div className="mt-8">
-      <Linea etiqueta="Formador" valor={formador} className="mb-3" />
       <table className="w-full border-collapse text-[11px]">
         <thead>
           <tr>
@@ -141,7 +140,12 @@ function TablaSemestre({ s, espacios, notas, formador }) {
             )
           })}
           <tr>
-            <td colSpan={7} className="px-2 py-1.5 text-right font-bold uppercase">Promedio</td>
+            <td colSpan={7} className="px-2 py-1.5">
+              <div className="flex items-end justify-between gap-6">
+                <Linea etiqueta="Formador" valor={formador} className="flex-1" />
+                <span className="font-bold uppercase">Promedio</span>
+              </div>
+            </td>
             <td className="border border-slate-600 text-center text-[13px] font-bold tabular-nums">{prom === null ? '' : fmt(prom)}</td>
           </tr>
         </tbody>
