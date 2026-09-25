@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 const VACIO = {
   cohorte_id: '', centro_formacion: 'Vicaría Episcopal Territorial Ntra. Sra. del Rosario', parroquia: '',
   fecha_matricula: '', nombre_completo: '', lugar_nacimiento: '', fecha_nacimiento: '', tipo_id: 'CC',
-  numero_id: '', direccion: '', barrio: '', telefono: '', ocupacion: '', nivel_escolar: '',
+  numero_id: '', correo: '', direccion: '', barrio: '', telefono: '', ocupacion: '', nivel_escolar: '',
   estudio_superior: '', estado: 'activo', observaciones: '',
 }
 
@@ -36,6 +36,7 @@ export default function EstudianteForm() {
     e.preventDefault()
     setGuardando(true); setError('')
     const limpio = Object.fromEntries(Object.entries(datos).map(([k, v]) => [k, v === '' ? null : v]))
+    if (limpio.correo) limpio.correo = limpio.correo.trim().toLowerCase()
     delete limpio.creado; delete limpio.cohortes
     const res = id
       ? await supabase.from('estudiantes').update(limpio).eq('id', id).select().single()
@@ -81,6 +82,7 @@ export default function EstudianteForm() {
         <Campo label="Dirección de residencia" name="direccion" {...p} />
         <Campo label="Barrio" name="barrio" {...p} />
         <Campo label="Teléfono o contacto" name="telefono" type="tel" {...p} />
+        <Campo label="Correo electrónico" name="correo" type="email" {...p} />
         <Campo label="Ocupación u oficio" name="ocupacion" {...p} />
         <Campo label="Nivel escolar más alto" name="nivel_escolar" {...p} />
         <Campo label="Estudio universitario o técnico" name="estudio_superior" {...p} />
