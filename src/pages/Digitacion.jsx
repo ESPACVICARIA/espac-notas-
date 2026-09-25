@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { CAMPOS, definitiva, fmt, parsearNota, NOTA_MINIMA } from '../lib/notas'
+import { CAMPOS, definitiva, promedio, fmt, parsearNota, NOTA_MINIMA } from '../lib/notas'
 import { ordenarEstudiantes, mostrarNombre, copiarColumna } from '../lib/planilla'
 import Actividades from '../components/Actividades'
 
@@ -22,6 +22,7 @@ export default function Digitacion({ perfil }) {
   const [notaVacias, setNotaVacias] = useState('')
   const [mensaje, setMensaje] = useState(null)
   const [guardando, setGuardando] = useState(false)
+  const [formadores, setFormadores] = useState({})
 
   useEffect(() => {
     supabase.from('espacios').select('*').order('id').then(({ data }) => setEspacios(data ?? []))
@@ -57,6 +58,10 @@ export default function Digitacion({ perfil }) {
     setSucios(new Set())
   }
   useEffect(() => { setMensaje(null); setCopia({}); cargar() }, [sel.cohorte, sel.espacio])
+  useEffect(() => {
+    if (!sel.cohorte) { setFormadores({}); return }
+    supabase.rpc('formadores_cohorte', { p_cohorte: Number(sel.cohorte) }).then(({ data }) => setFormadores(data ?? {}))
+  }, [sel.cohorte])
 
   function elegir(nuevo) {
     if (sucios.size && !confirm('Tienes notas sin guardar. ¿Salir sin guardarlas?')) return
@@ -265,6 +270,22 @@ export default function Digitacion({ perfil }) {
                       )
                     })}
                   </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-200">
+                      <td colSpan={CAMPOS.length + 1} className="p-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm">
+                            <span className="text-slate-500">Formador del semestre {espacio.semestre}:</span>{' '}
+                            <strong>{formadores[espacio.semestre] || 'Sin asignar'}</strong>
+                          </span>
+                          <span className="font-medium">Promedio del grupo</span>
+                        </div>
+                      </td>
+                      <td className="p-2 text-center font-serif text-lg font-semibold tabular-nums">
+                        {fmt(promedio(estudiantes.map((est) => definitiva(Object.fromEntries(CAMPOS.map(([k]) => [k, parsearNota(valores[est.id]?.[k] ?? '') ?? null]))))))}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-4">
