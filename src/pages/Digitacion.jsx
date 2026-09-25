@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { CAMPOS, definitiva, promedio, fmt, parsearNota, NOTA_MINIMA } from '../lib/notas'
 import { ordenarEstudiantes, mostrarNombre, copiarColumna } from '../lib/planilla'
 import Actividades from '../components/Actividades'
+import ImportarNotas from '../components/ImportarNotas'
 
 const aTexto = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','))
 
@@ -25,7 +26,7 @@ export default function Digitacion({ perfil }) {
   const [formadores, setFormadores] = useState({})
 
   useEffect(() => {
-    supabase.from('espacios').select('*').order('id').then(({ data }) => setEspacios(data ?? []))
+    supabase.from('espacios').select('*').order('semestre').order('orden').order('id').then(({ data }) => setEspacios(data ?? []))
     if (admin) {
       supabase.from('cohortes').select('id, nombre').order('anio', { ascending: false })
         .then(({ data }) => setOpciones((data ?? []).flatMap((c) => [1, 2, 3, 4].map((s) => ({ cohorte_id: c.id, nombre: c.nombre, semestre: s })))))
@@ -37,7 +38,7 @@ export default function Digitacion({ perfil }) {
 
   const cohortes = useMemo(() => [...new Map(opciones.map((o) => [o.cohorte_id, o.nombre])).entries()], [opciones])
   const semestres = opciones.filter((o) => String(o.cohorte_id) === sel.cohorte).map((o) => o.semestre)
-  const espaciosSem = espacios.filter((e) => String(e.semestre) === sel.semestre)
+  const espaciosSem = espacios.filter((e) => String(e.semestre) === sel.semestre && e.activo !== false)
   const espacio = espacios.find((e) => String(e.id) === sel.espacio)
   const estudiantes = useMemo(() => ordenarEstudiantes(crudos, orden), [crudos, orden])
   const contenidosBloqueado = numActividades > 0
@@ -65,7 +66,7 @@ export default function Digitacion({ perfil }) {
 
   function elegir(nuevo) {
     if (sucios.size && !confirm('Tienes notas sin guardar. ¿Salir sin guardarlas?')) return
-    setSel(nuevo); setVista('planilla')
+    setSel(nuevo); if (vista !== 'importar' || !nuevo.semestre) setVista('planilla')
   }
   function cambiarVista(v) {
     if (v === vista) return
@@ -168,14 +169,13 @@ export default function Digitacion({ perfil }) {
         </div>
       )}
 
-      {espacio && (estudiantes.length === 0 ? (
-        <p className="text-slate-500">Esta cohorte no tiene estudiantes activos.</p>
-      ) : (
+      {sel.semestre && (
         <>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {pestana('planilla', 'Planilla')}
               {pestana('actividades', `Actividades de contenidos${numActividades ? ` (${numActividades})` : ''}`)}
+              {pestana('importar', 'Importar desde Excel')}
             </div>
             <label className="mb-2 flex items-center gap-2 text-sm">
               Ordenar por
@@ -186,7 +186,17 @@ export default function Digitacion({ perfil }) {
             </label>
           </div>
 
-          {vista === 'actividades' ? (
+          {vista === 'importar' ? (
+            <ImportarNotas cohorteId={Number(sel.cohorte)} cohorteNombre={cohortes.find(([id]) => String(id) === sel.cohorte)?.[1]}
+              semestre={Number(sel.semestre)} espacios={espacios} espacioActual={espacio} perfil={perfil} orden={orden}
+              alTerminar={cargar} />
+          ) : !espacio ? (
+            <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-slate-500">
+              Elige un módulo, retiro o seminario para ver su planilla, o usa "Importar desde Excel" para cargar todo el semestre.
+            </p>
+          ) : estudiantes.length === 0 ? (
+            <p className="text-slate-500">Esta cohorte no tiene estudiantes activos.</p>
+          ) : vista === 'actividades' ? (
             <Actividades cohorteId={Number(sel.cohorte)} espacio={espacio} estudiantes={estudiantes} orden={orden}
               perfil={perfil} alGuardar={cargar} />
           ) : (
@@ -298,7 +308,7 @@ export default function Digitacion({ perfil }) {
             </>
           )}
         </>
-      ))}
+      )}
     </section>
   )
 }
