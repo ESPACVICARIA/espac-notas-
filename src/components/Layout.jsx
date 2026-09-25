@@ -9,8 +9,8 @@ export default function Layout({ perfil, children }) {
     `block rounded-md px-3 py-2 text-sm font-medium ${isActive ? 'bg-white/15 text-white' : 'text-blue-100 hover:bg-white/10'}`
 
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[15rem_1fr]">
-      <aside className="bg-tinta p-5 text-white md:min-h-screen">
+    <div className="min-h-screen md:grid md:grid-cols-[15rem_1fr] print:block">
+      <aside className="bg-tinta p-5 text-white md:min-h-screen print:hidden">
         <div className="mb-8 border-b border-white/15 pb-5">
           <Logos tamano="sm" className="mb-4 rounded-lg bg-white px-3 py-2" />
           <p className="font-serif text-xl font-semibold leading-tight">Proceso de ESPAC Notas</p>
@@ -30,7 +30,7 @@ export default function Layout({ perfil, children }) {
           </button>
         </div>
       </aside>
-      <main className="mx-auto w-full max-w-6xl p-5 md:p-10">{children}</main>
+      <main className="mx-auto w-full max-w-6xl p-5 md:p-10 print:max-w-none print:p-0">{children}</main>
     </div>
   )
 }
