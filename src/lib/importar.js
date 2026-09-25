@@ -13,6 +13,7 @@ export const COLUMNAS = [
   ['direccion', 'Dirección', ['direccionresidencia', 'direccionderesidencia']],
   ['barrio', 'Barrio', []],
   ['telefono', 'Teléfono', ['celular', 'contacto', 'telefonoocontacto']],
+  ['correo', 'Correo electrónico', ['correo', 'email', 'mail', 'ecorreo']],
   ['ocupacion', 'Ocupación', ['oficio', 'ocupacionuoficio']],
   ['nivel_escolar', 'Nivel escolar', ['nivelescolarmasalto', 'nivelescolarmasaltoalcanzado', 'escolaridad']],
   ['estudio_superior', 'Estudio universitario o técnico', ['estudiouniversitario', 'estudiosuperior', 'estudiotecnico']],
@@ -36,7 +37,7 @@ const CAMPOS_TEXTO = ['parroquia', 'centro_formacion', 'lugar_nacimiento', 'dire
 
 // Fila vacía con todas las columnas, para que todas las inserciones sean uniformes
 export const ESTUDIANTE_VACIO = {
-  nombre_completo: null, tipo_id: null, numero_id: null, fecha_matricula: null, fecha_nacimiento: null,
+  nombre_completo: null, tipo_id: null, numero_id: null, correo: null, fecha_matricula: null, fecha_nacimiento: null,
   ...Object.fromEntries(CAMPOS_TEXTO.map((c) => [c, null])), estado: 'activo',
 }
 
@@ -91,6 +92,13 @@ export function limpiarFila(o) {
     if (t) datos[c] = t
   }
 
+  const correo = texto(o.correo)
+  if (correo) {
+    const c = correo.toLowerCase().replace(/\s/g, '')
+    if (/^[^@]+@[^@]+\.[^@]+$/.test(c)) datos.correo = c
+    else errores.push(`correo no válido "${correo}"`)
+  }
+
   for (const c of ['fecha_matricula', 'fecha_nacimiento']) {
     const r = aFecha(o[c])
     if (r.error) errores.push(r.error)
@@ -143,7 +151,7 @@ export function descargarPlantilla() {
     titulos,
     ['María Fernanda Rojas Díaz', 'CC', '1020304050', 'Nuestra Señora de Fátima',
       'Vicaría Episcopal Territorial Ntra. Sra. del Rosario', '15/02/2026', 'Bogotá', '09/09/1980',
-      'Cra 100 # 120-30', 'Suba', '3001234567', 'Docente', 'Secundaria', '', ''],
+      'Cra 100 # 120-30', 'Suba', '3001234567', 'maria.rojas@correo.com', 'Docente', 'Secundaria', '', ''],
     [],
     ['Solo "Nombre completo" es obligatorio. Llena los estudiantes en la primera hoja; esta hoja es solo de ejemplo.'],
     ['Tipo documento: CC, CE, PAS o TI. Fechas: DD/MM/AAAA.'],
