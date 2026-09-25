@@ -4,6 +4,7 @@ import { CAMPOS, definitiva, promedio, fmt, parsearNota, NOTA_MINIMA } from '../
 import { ordenarEstudiantes, mostrarNombre, copiarColumna } from '../lib/planilla'
 import Actividades from '../components/Actividades'
 import ImportarNotas from '../components/ImportarNotas'
+import AutoevaluacionEditor from '../components/AutoevaluacionEditor'
 
 const aTexto = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','))
 
@@ -16,6 +17,7 @@ export default function Digitacion({ perfil }) {
   const [valores, setValores] = useState({})
   const [sucios, setSucios] = useState(new Set())
   const [numActividades, setNumActividades] = useState(0)
+  const [autoEnLinea, setAutoEnLinea] = useState(false)
   const [vista, setVista] = useState('planilla')
   const [orden, setOrden] = useState('apellidos')
   const [copia, setCopia] = useState({})
@@ -42,20 +44,25 @@ export default function Digitacion({ perfil }) {
   const espacio = espacios.find((e) => String(e.id) === sel.espacio)
   const estudiantes = useMemo(() => ordenarEstudiantes(crudos, orden), [crudos, orden])
   const contenidosBloqueado = numActividades > 0
+  // Columnas que se llenan solas: Contenidos (actividades) y Autoevaluación (en línea)
+  const ORIGEN = { contenidos: 'de actividades', autoevaluacion: 'en línea' }
+  const bloqueado = (k) => (k === 'contenidos' && contenidosBloqueado) || (k === 'autoevaluacion' && autoEnLinea)
 
   async function cargar() {
     if (!sel.cohorte || !sel.espacio) { setCrudos([]); return }
     const { data: ests } = await supabase.from('estudiantes').select('id, nombre_completo')
       .eq('cohorte_id', sel.cohorte).eq('estado', 'activo')
     const ids = (ests ?? []).map((e) => e.id)
-    const [{ data: ns }, { count }] = await Promise.all([
+    const [{ data: ns }, { count }, { count: numAuto }] = await Promise.all([
       ids.length ? supabase.from('notas').select('*').eq('espacio_id', sel.espacio).in('estudiante_id', ids) : Promise.resolve({ data: [] }),
       supabase.from('actividades').select('id', { count: 'exact', head: true }).eq('cohorte_id', sel.cohorte).eq('espacio_id', sel.espacio),
+      supabase.from('autoevaluaciones').select('id', { count: 'exact', head: true }).eq('cohorte_id', sel.cohorte).eq('espacio_id', sel.espacio),
     ])
     const mapa = Object.fromEntries((ns ?? []).map((n) => [n.estudiante_id, n]))
     setCrudos(ests ?? [])
     setValores(Object.fromEntries(ids.map((id) => [id, Object.fromEntries(CAMPOS.map(([k]) => [k, aTexto(mapa[id]?.[k])]))])))
     setNumActividades(count ?? 0)
+    setAutoEnLinea((numAuto ?? 0) > 0)
     setSucios(new Set())
   }
   useEffect(() => { setMensaje(null); setCopia({}); cargar() }, [sel.cohorte, sel.espacio])
@@ -113,7 +120,7 @@ export default function Digitacion({ perfil }) {
       : { tipo: 'ok', texto: 'No había casillas vacías.' })
   }
 
-  const camposEditables = CAMPOS.filter(([k]) => !(k === 'contenidos' && contenidosBloqueado))
+  const camposEditables = CAMPOS.filter(([k]) => !bloqueado(k))
   const invalidas = estudiantes.some((e) => camposEditables.some(([k]) => parsearNota(valores[e.id]?.[k] ?? '') === undefined))
 
   async function guardar() {
@@ -175,6 +182,7 @@ export default function Digitacion({ perfil }) {
             <div className="flex flex-wrap gap-2">
               {pestana('planilla', 'Planilla')}
               {pestana('actividades', `Actividades de contenidos${numActividades ? ` (${numActividades})` : ''}`)}
+              {pestana('autoevaluacion', `Autoevaluación en línea${autoEnLinea ? ' ✓' : ''}`)}
               {pestana('importar', 'Importar desde Excel')}
             </div>
             <label className="mb-2 flex items-center gap-2 text-sm">
@@ -196,6 +204,9 @@ export default function Digitacion({ perfil }) {
             </p>
           ) : estudiantes.length === 0 ? (
             <p className="text-slate-500">Esta cohorte no tiene estudiantes activos.</p>
+          ) : vista === 'autoevaluacion' ? (
+            <AutoevaluacionEditor cohorteId={Number(sel.cohorte)} espacio={espacio} estudiantes={estudiantes} orden={orden}
+              alCambiar={cargar} />
           ) : vista === 'actividades' ? (
             <Actividades cohorteId={Number(sel.cohorte)} espacio={espacio} estudiantes={estudiantes} orden={orden}
               perfil={perfil} alGuardar={cargar} />
@@ -208,7 +219,7 @@ export default function Digitacion({ perfil }) {
                   onKeyDown={(e) => e.key === 'Enter' && llenarVacias()} />
                 <button className="btn-sec py-1" onClick={llenarVacias}>Llenar vacías</button>
                 <span className="text-xs text-slate-500">
-                  Aplica a todas las columnas{contenidosBloqueado ? ' menos Contenidos' : ''}. Las notas ya escritas se respetan.
+                  Aplica a todas las columnas{CAMPOS.some(([k]) => bloqueado(k)) ? ' que no se llenan solas' : ''}. Las notas ya escritas se respetan.
                 </span>
               </div>
               <label className="mb-3 flex items-center gap-2 text-sm">
@@ -227,7 +238,7 @@ export default function Digitacion({ perfil }) {
                       {CAMPOS.map(([k, t]) => (
                         <th key={k} className="p-2">
                           {t}
-                          {k === 'contenidos' && contenidosBloqueado && <span className="block text-xs font-normal text-mariano">de actividades</span>}
+                          {bloqueado(k) && <span className="block text-xs font-normal text-mariano">{ORIGEN[k]}</span>}
                         </th>
                       ))}
                       <th className="p-2">Definitiva</th>
@@ -238,7 +249,7 @@ export default function Digitacion({ perfil }) {
                       <td className="p-2 text-xs font-semibold text-slate-600">Copiar a todos</td>
                       {CAMPOS.map(([k, t]) => (
                         <td key={k} className="p-2 text-center">
-                          {k === 'contenidos' && contenidosBloqueado ? (
+                          {bloqueado(k) ? (
                             <span className="text-xs text-slate-400">Automático</span>
                           ) : (
                             <div className="flex items-center justify-center gap-1">
@@ -258,11 +269,11 @@ export default function Digitacion({ perfil }) {
                         <tr key={est.id} className={`border-t border-slate-100 ${sucios.has(est.id) ? 'bg-amber-50' : ''}`}>
                           <td className="p-2 font-medium">{mostrarNombre(est, orden)}</td>
                           {CAMPOS.map(([k, t]) => {
-                            if (k === 'contenidos' && contenidosBloqueado) {
+                            if (bloqueado(k)) {
                               return (
                                 <td key={k} className="p-2 text-center">
                                   <span className="inline-block w-16 rounded bg-cielo px-2 py-1 text-center tabular-nums text-mariano"
-                                    title="Calculado con las actividades de contenidos">{v[k] || '—'}</span>
+                                    title={k === 'contenidos' ? 'Calculado con las actividades de contenidos' : 'Respondida por el estudiante en su portal'}>{v[k] || '—'}</span>
                                 </td>
                               )
                             }
@@ -286,7 +297,7 @@ export default function Digitacion({ perfil }) {
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-sm">
                             <span className="text-slate-500">Formador del semestre {espacio.semestre}:</span>{' '}
-                            <strong>{formadores[espacio.semestre] || 'Sin asignar'}</strong>
+                            <strong>{formadores[espacio.semestre] === '' ? 'Falta registrar su nombre en Configuración' : formadores[espacio.semestre] || 'Sin asignar'}</strong>
                           </span>
                           <span className="font-medium">Promedio del grupo</span>
                         </div>
