@@ -9,6 +9,7 @@ import EstudianteForm from './pages/EstudianteForm'
 import Ficha from './pages/Ficha'
 import Digitacion from './pages/Digitacion'
 import Configuracion from './pages/Configuracion'
+import Importar from './pages/Importar'
 
 export default function App() {
   const { sesion, perfil, cargando } = useSesion()
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/estudiantes/:id" element={<Ficha perfil={perfil} />} />
         <Route path="/estudiantes/:id/editar" element={admin ? <EstudianteForm /> : <Navigate to="/" />} />
         <Route path="/notas" element={puedeCalificar ? <Digitacion perfil={perfil} /> : <Navigate to="/" />} />
+        <Route path="/importar" element={admin ? <Importar /> : <Navigate to="/" />} />
         <Route path="/configuracion" element={admin ? <Configuracion /> : <Navigate to="/" />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
