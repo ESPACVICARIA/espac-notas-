@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSesion } from './lib/useSesion'
+import { supabase } from './lib/supabase'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import PortalEstudiante from './pages/PortalEstudiante'
@@ -24,6 +25,10 @@ export default function App() {
         acceso={acceso}
         salir={() => setAcceso(null)}
         alCambiarClave={(nueva) => setAcceso((a) => ({ ...a, clave: nueva, datos: { ...a.datos, debe_cambiar: false } }))}
+        alRecargar={async () => {
+          const { data } = await supabase.rpc('portal_estudiante', { p_documento: acceso.documento, p_clave: acceso.clave })
+          if (data && !data.error) setAcceso((a) => ({ ...a, datos: data }))
+        }}
       />
     )
   }
