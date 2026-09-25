@@ -21,10 +21,8 @@ export default function Imprimir() {
       setEst(e); setEspacios(esp ?? [])
       setNotas(Object.fromEntries((ns ?? []).map((n) => [n.espacio_id, n])))
       if (e?.cohorte_id) {
-        const { data: as } = await supabase.from('asignaciones').select('semestre, perfiles(nombre)').eq('cohorte_id', e.cohorte_id)
-        const porSem = {}
-        for (const a of as ?? []) if (a.perfiles?.nombre) (porSem[a.semestre] ??= []).push(a.perfiles.nombre)
-        setFormadores(Object.fromEntries(Object.entries(porSem).map(([s, n]) => [s, n.join(', ')])))
+        const { data: f } = await supabase.rpc('formadores_cohorte', { p_cohorte: e.cohorte_id })
+        setFormadores(f ?? {})
       }
     })()
   }, [id])
