@@ -108,7 +108,8 @@ export function HojaMatricula({ est }) {
 }
 
 function TablaSemestre({ s, espacios, notas, formador }) {
-  const items = espacios.filter((e) => e.semestre === s)
+  const items = espacios.filter((e) => e.semestre === s && (e.activo !== false || notas[e.id]))
+    .sort((a, b) => a.orden - b.orden || a.id - b.id)
   const prom = promedio(items.map((e) => definitiva(notas[e.id])))
   const celda = (n, k) => (!n ? '' : fmt(n[k]))
   return (
@@ -157,7 +158,7 @@ function TablaSemestre({ s, espacios, notas, formador }) {
 // Dos páginas: semestres 1-2 y 3-4, como la hoja física
 export function HojaItinerario({ est, espacios, notas, formadores = {} }) {
   const general = promedio([1, 2, 3, 4].map((s) =>
-    promedio(espacios.filter((e) => e.semestre === s).map((e) => definitiva(notas[e.id])))))
+    promedio(espacios.filter((e) => e.semestre === s && (e.activo !== false || notas[e.id])).map((e) => definitiva(notas[e.id])))))
   return (
     <>
       {[[1, 2], [3, 4]].map((par, i) => (
