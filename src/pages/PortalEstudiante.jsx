@@ -4,6 +4,7 @@ import { resumen, Camino, TablasSemestres } from '../components/Itinerario'
 import { fmt } from '../lib/notas'
 import Logos from '../components/Logos'
 import { HojaItinerario, BarraImpresion } from '../components/Documentos'
+import ListaDocumentos from '../components/ListaDocumentos'
 
 function CambioClave({ documento, clave, alCambiar }) {
   const [nueva, setNueva] = useState('')
@@ -45,6 +46,7 @@ function CambioClave({ documento, clave, alCambiar }) {
 export default function PortalEstudiante({ acceso, salir, alCambiarClave }) {
   const { datos, documento, clave } = acceso
   const [imprimiendo, setImprimiendo] = useState(false)
+  const [seccion, setSeccion] = useState('notas')
   const est = datos.estudiante
   const notas = Object.fromEntries((datos.notas ?? []).map((n) => [n.espacio_id, n]))
   const { semestres, general } = resumen(datos.espacios ?? [], notas)
@@ -91,8 +93,21 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave }) {
                 </div>
               </div>
             </div>
+            <div className="mb-6 flex gap-2 border-b border-slate-200">
+              {[['notas', 'Mis notas'], ['documentos', `Documentos${datos.documentos?.length ? ` (${datos.documentos.length})` : ''}`]].map(([k, t]) => (
+                <button key={k} onClick={() => setSeccion(k)}
+                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${seccion === k ? 'border-mariano text-mariano' : 'border-transparent text-slate-500'}`}>{t}</button>
+              ))}
+            </div>
+            {seccion === 'documentos' ? (
+              <ListaDocumentos documentos={datos.documentos ?? []}
+                vacio="Todavía no hay documentos para tus semestres. Tus formadores los publicarán aquí." />
+            ) : (
+            <>
             <Camino semestres={semestres} />
             <TablasSemestres semestres={semestres} notas={notas} formadores={datos.formadores ?? {}} />
+            </>
+            )}
           </>
         )}
       </main>
