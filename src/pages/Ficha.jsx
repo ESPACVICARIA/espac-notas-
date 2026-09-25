@@ -25,7 +25,7 @@ export default function Ficha({ perfil }) {
         setFormadores(f ?? {})
       }
     })
-    supabase.from('espacios').select('*').order('id').then(({ data }) => setEspacios(data ?? []))
+    supabase.from('espacios').select('*').order('semestre').order('orden').order('id').then(({ data }) => setEspacios(data ?? []))
     supabase.from('notas').select('*').eq('estudiante_id', id)
       .then(({ data }) => setNotas(Object.fromEntries((data ?? []).map((n) => [n.espacio_id, n]))))
   }, [id])
