@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { resumen, TablasSemestres } from '../components/Itinerario'
+import { resumen, Camino, TablasSemestres } from '../components/Itinerario'
 import { fmt } from '../lib/notas'
 import Logos from '../components/Logos'
 import { HojaItinerario, BarraImpresion } from '../components/Documentos'
@@ -48,14 +48,20 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
   const { datos, documento, clave } = acceso
   const [imprimiendo, setImprimiendo] = useState(false)
   const [seccion, setSeccion] = useState('notas')
+  const [verTodo, setVerTodo] = useState(false)
   const est = datos.estudiante
   const notas = Object.fromEntries((datos.notas ?? []).map((n) => [n.espacio_id, n]))
-  const { semestres } = resumen(datos.espacios ?? [], notas)
+  const { semestres, general } = resumen(datos.espacios ?? [], notas)
   // Semestre en curso de la cohorte; si no está definido, el último con notas
   const conNotas = semestres.filter((x) => x.completos > 0).map((x) => x.s)
   const actual = datos.semestre_actual ?? (conNotas.length ? Math.max(...conNotas) : 1)
-  const visibles = semestres.filter((x) => x.s === actual)
-  const promedioActual = visibles[0]?.prom ?? null
+  // Dos vistas: solo el semestre en curso, o todos los semestres que ya tienen notas
+  const conDatos = [...new Set([...conNotas, actual])].sort((a, b) => a - b)
+  const permitido = datos.ver_todas === true // lo decide la coordinación por cohorte
+  const vistaTodo = verTodo && permitido
+  const visibles = semestres.filter((x) => (vistaTodo ? conDatos.includes(x.s) : x.s === actual))
+  const promedioVista = vistaTodo ? general : semestres.find((x) => x.s === actual)?.prom ?? null
+  const hojasPdf = vistaTodo ? (conDatos.length === 4 ? null : conDatos) : [actual]
 
   return (
     <div className="min-h-screen">
@@ -81,7 +87,7 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
               <button onClick={() => setImprimiendo(false)} className="text-sm text-mariano hover:underline">Volver a mis notas</button>
             </BarraImpresion>
             <div className="overflow-x-auto print:overflow-visible">
-              <HojaItinerario est={est ?? {}} espacios={datos.espacios ?? []} notas={notas} formadores={datos.formadores ?? {}} solo={[actual]} />
+              <HojaItinerario est={est ?? {}} espacios={datos.espacios ?? []} notas={notas} formadores={datos.formadores ?? {}} solo={hojasPdf} />
             </div>
           </>
         ) : (
@@ -94,8 +100,8 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
               <div className="flex items-center gap-4">
                 <button onClick={() => setImprimiendo(true)} className="btn-sec">Descargar PDF</button>
                 <div className="text-right">
-                  <p className="font-serif text-4xl font-semibold tabular-nums">{fmt(promedioActual)}</p>
-                  <p className="text-xs text-slate-500">Promedio del semestre {actual}</p>
+                  <p className="font-serif text-4xl font-semibold tabular-nums">{fmt(promedioVista)}</p>
+                  <p className="text-xs text-slate-500">{vistaTodo ? 'Promedio del itinerario' : `Promedio del semestre ${actual}`}</p>
                 </div>
               </div>
             </div>
@@ -112,7 +118,20 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
                 vacio="Todavía no hay documentos para tus semestres. Tus formadores los publicarán aquí." />
             ) : (
             <>
-            <p className="mb-4 inline-block rounded-full bg-cielo px-4 py-1 text-sm font-semibold text-mariano">Semestre {actual} en curso</p>
+            {!permitido ? (
+              <p className="mb-4 inline-block rounded-full bg-cielo px-4 py-1 text-sm font-semibold text-mariano">Semestre {actual} en curso</p>
+            ) : (
+            <div className="mb-5 flex flex-wrap items-center gap-2" role="group" aria-label="Qué notas ver">
+              {[[false, `Semestre ${actual} en curso`], [true, 'Todas mis notas']].map(([v, t]) => (
+                <button key={t} onClick={() => setVerTodo(v)} aria-pressed={verTodo === v}
+                  className={`rounded-full px-4 py-1.5 text-sm font-semibold ${verTodo === v ? 'bg-mariano text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-cielo'}`}>{t}</button>
+              ))}
+            </div>
+            )}
+            {vistaTodo && <Camino semestres={semestres} />}
+            {vistaTodo && conDatos.length < 4 && (
+              <p className="mb-4 text-xs text-slate-500">Se muestran los semestres que ya tienen notas. Los demás aparecerán cuando tus formadores las registren.</p>
+            )}
             <TablasSemestres semestres={visibles} notas={notas} formadores={datos.formadores ?? {}} />
             </>
             )}
