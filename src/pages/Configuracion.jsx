@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import NuevoUsuario from '../components/NuevoUsuario'
+import { gestionarUsuarios, generarClave } from '../lib/usuarios'
 
 const GRUPOS = [
   ['admin', 'Coordinación y administración', 'Acceso completo: estudiantes, módulos, importaciones y configuración.'],
@@ -47,6 +49,19 @@ export default function Configuracion() {
     )
     if (!ok) return
     ejecutar(supabase.from('cohortes').delete().eq('id', c.id))
+  }
+
+  async function cambiarClave(p) {
+    const sugerida = generarClave()
+    const clave = prompt(`Nueva contraseña para ${p.nombre || p.correo} (mínimo 8 caracteres).\n\nPuedes usar la sugerida o escribir otra:`, sugerida)
+    if (clave === null) return
+    setError(''); setAviso('')
+    try {
+      await gestionarUsuarios({ accion: 'cambiar_clave', id: p.id, clave: clave.trim() })
+      setAviso(`Contraseña cambiada. Entrégale a ${p.nombre || p.correo} su nueva contraseña: ${clave.trim()}`)
+    } catch (e) {
+      setError(e.message)
+    }
   }
 
   async function guardarNombre() {
@@ -131,9 +146,10 @@ export default function Configuracion() {
       <div>
         <h2 className="mb-1 text-xl font-semibold">Usuarios y roles</h2>
         <p className="mb-3 text-sm text-slate-500">
-          Para dar acceso a un formador, créale el usuario en Supabase (Authentication, Add user) y luego asígnale el rol aquí.
+          Usa "Crear usuario" para dar acceso a un docente o a la coordinación.
           El nombre es el que aparece en planillas, itinerarios y PDF: escríbelo con su título, por ejemplo "Pbro. Juan Pérez" o "Diác. Germán Velandia".
         </p>
+        <NuevoUsuario alCrear={cargar} />
         {aviso && <p className="mb-3 text-sm text-green-700">{aviso}</p>}
         {selUsuarios.size > 0 && (
           <div className="mb-3 flex items-center gap-3">
@@ -204,6 +220,9 @@ export default function Configuracion() {
                                 onChange={(e) => ejecutar(supabase.from('perfiles').update({ rol: e.target.value }).eq('id', p.id))}>
                                 <option value="admin">Coordinación</option><option value="formador">Docente (formador)</option><option value="estudiante">Estudiante</option>
                               </select>
+                              {p.rol !== 'estudiante' && (
+                                <button onClick={() => cambiarClave(p)} className="text-xs font-semibold text-mariano underline">Cambiar contraseña</button>
+                              )}
                               {!esYo && (
                                 <button onClick={() => eliminarUsuarios([p.id])} className="text-xs font-semibold text-alerta underline">Eliminar</button>
                               )}
