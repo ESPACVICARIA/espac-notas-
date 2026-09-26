@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { resumen, Camino, TablasSemestres } from '../components/Itinerario'
 import { fmt } from '../lib/notas'
@@ -6,6 +6,7 @@ import Logos from '../components/Logos'
 import { HojaItinerario, BarraImpresion } from '../components/Documentos'
 import ListaDocumentos from '../components/ListaDocumentos'
 import PortalAutoevaluaciones from '../components/PortalAutoevaluaciones'
+import PortalMensajes from '../components/PortalMensajes'
 
 function CambioClave({ documento, clave, alCambiar }) {
   const [nueva, setNueva] = useState('')
@@ -49,6 +50,13 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
   const [imprimiendo, setImprimiendo] = useState(false)
   const [seccion, setSeccion] = useState('notas')
   const [verTodo, setVerTodo] = useState(false)
+  const [mensajes, setMensajes] = useState([])
+  useEffect(() => {
+    if (datos.debe_cambiar) return
+    supabase.rpc('portal_mensajes', { p_documento: documento, p_clave: clave })
+      .then(({ data }) => { if (data?.mensajes) setMensajes(data.mensajes) })
+  }, [documento, clave, datos.debe_cambiar])
+  const sinLeer = mensajes.filter((m) => !m.leido).length
   const est = datos.estudiante
   const notas = Object.fromEntries((datos.notas ?? []).map((n) => [n.espacio_id, n]))
   const { semestres, general } = resumen(datos.espacios ?? [], notas)
@@ -106,12 +114,15 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
               </div>
             </div>
             <div className="mb-6 flex gap-2 border-b border-slate-200">
-              {[['notas', 'Mis notas'], ['autoevaluaciones', 'Autoevaluaciones'], ['documentos', `Documentos${datos.documentos?.length ? ` (${datos.documentos.length})` : ''}`]].map(([k, t]) => (
+              {[['notas', 'Mis notas'], ['mensajes', `Mensajes${sinLeer ? ` (${sinLeer} nuevo${sinLeer > 1 ? 's' : ''})` : ''}`], ['autoevaluaciones', 'Autoevaluaciones'], ['documentos', `Documentos${datos.documentos?.length ? ` (${datos.documentos.length})` : ''}`]].map(([k, t]) => (
                 <button key={k} onClick={() => setSeccion(k)}
                   className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${seccion === k ? 'border-mariano text-mariano' : 'border-transparent text-slate-500'}`}>{t}</button>
               ))}
             </div>
-            {seccion === 'autoevaluaciones' ? (
+            {seccion === 'mensajes' ? (
+              <PortalMensajes mensajes={mensajes} documento={documento} clave={clave}
+                alLeer={(id) => setMensajes((ms) => ms.map((m) => (m.id === id ? { ...m, leido: true } : m)))} />
+            ) : seccion === 'autoevaluaciones' ? (
               <PortalAutoevaluaciones documento={documento} clave={clave} alEnviar={alRecargar} />
             ) : seccion === 'documentos' ? (
               <ListaDocumentos documentos={datos.documentos ?? []}
