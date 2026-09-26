@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import NuevoUsuario from '../components/NuevoUsuario'
 import { gestionarUsuarios, generarClave } from '../lib/usuarios'
@@ -9,6 +10,12 @@ const GRUPOS = [
   ['estudiante', 'Cuentas de estudiante', 'Cuentas creadas en Supabase sin rol de trabajo. Los estudiantes del portal entran con su documento y no necesitan cuenta aquí.'],
 ]
 
+const SECCIONES = [
+  ['usuarios', 'Usuarios y roles', 'Crear cuentas, roles, nombres y contraseñas'],
+  ['asignaciones', 'Asignación de formadores', 'Qué docente dicta cada semestre'],
+  ['cohortes', 'Cohortes', 'Grupos, semestre en curso y visibilidad de notas'],
+]
+
 export default function Configuracion() {
   const [cohortes, setCohortes] = useState([])
   const [perfiles, setPerfiles] = useState([])
@@ -16,6 +23,9 @@ export default function Configuracion() {
   const [nueva, setNueva] = useState({ nombre: '', anio: new Date().getFullYear() })
   const [asig, setAsig] = useState({ formador_id: '', cohorte_id: '', semestre: '1' })
   const [error, setError] = useState('')
+  const [params, setParams] = useSearchParams()
+  const seccion = SECCIONES.some(([k]) => k === params.get('seccion')) ? params.get('seccion') : 'usuarios'
+  const irA = (k) => { setError(''); setParams({ seccion: k }, { replace: true }) }
   const [yo, setYo] = useState(null)
   const [selUsuarios, setSelUsuarios] = useState(new Set())
   const [aviso, setAviso] = useState('')
@@ -91,12 +101,34 @@ export default function Configuracion() {
 
   const ejecutar = async (promesa) => { setError(''); const { error } = await promesa; if (error) setError(error.message); else cargar() }
 
+  const conteos = {
+    usuarios: perfiles.filter((p) => p.rol !== 'estudiante').length,
+    asignaciones: asignaciones.length,
+    cohortes: cohortes.length,
+  }
+
   return (
-    <section className="space-y-10">
+    <section>
       <h1 className="text-3xl font-semibold">Configuración</h1>
+      <p className="mb-6 text-sm text-slate-500">Elige qué quieres administrar.</p>
+      <div className="md:grid md:grid-cols-[14rem_1fr] md:gap-8">
+        <nav aria-label="Secciones de configuración" className="mb-6 flex gap-2 overflow-x-auto md:mb-0 md:flex-col md:overflow-visible">
+          {SECCIONES.map(([k, titulo, detalle]) => (
+            <button key={k} onClick={() => irA(k)} aria-current={seccion === k ? 'page' : undefined}
+              className={`shrink-0 rounded-lg border px-4 py-3 text-left ${seccion === k ? 'border-mariano bg-cielo text-mariano' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
+              <span className="flex items-center justify-between gap-3 text-sm font-semibold">
+                {titulo}
+                <span className="rounded-full bg-white px-2 text-xs font-normal text-slate-500 ring-1 ring-slate-200">{conteos[k]}</span>
+              </span>
+              <span className="hidden text-xs font-normal text-slate-500 md:block">{detalle}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="min-w-0 space-y-4">
+
       {error && <p className="text-sm text-alerta">{error}</p>}
 
-      <div>
+      {seccion === 'cohortes' && (<div>
         <h2 className="mb-3 text-xl font-semibold">Cohortes</h2>
         <form className="mb-4 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); ejecutar(supabase.from('cohortes').insert(nueva)); setNueva({ ...nueva, nombre: '' }) }}>
           <input className="campo max-w-xs" required placeholder="Ej. Cohorte 2026-I" value={nueva.nombre} onChange={(e) => setNueva({ ...nueva, nombre: e.target.value })} />
@@ -141,9 +173,9 @@ export default function Configuracion() {
             </li>
           ))}
         </ul>
-      </div>
+      </div>)}
 
-      <div>
+      {seccion === 'usuarios' && (<div>
         <h2 className="mb-1 text-xl font-semibold">Usuarios y roles</h2>
         <p className="mb-3 text-sm text-slate-500">
           Usa "Crear usuario" para dar acceso a un docente o a la coordinación.
@@ -238,9 +270,9 @@ export default function Configuracion() {
             )
           })}
         </div>
-      </div>
+      </div>)}
 
-      <div>
+      {seccion === 'asignaciones' && (<div>
         <h2 className="mb-1 text-xl font-semibold">Asignación de formadores</h2>
         <p className="mb-3 text-sm text-slate-500">Cada formador solo puede digitar notas del semestre y la cohorte que tenga asignados.</p>
         <form className="mb-4 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); ejecutar(supabase.from('asignaciones').insert({ ...asig, semestre: Number(asig.semestre) })) }}>
@@ -265,6 +297,8 @@ export default function Configuracion() {
             </li>
           ))}
         </ul>
+      </div>)}
+        </div>
       </div>
     </section>
   )
