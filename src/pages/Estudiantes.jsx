@@ -22,6 +22,9 @@ export default function Estudiantes({ perfil }) {
   const [aviso, setAviso] = useState(null)
   const [eliminando, setEliminando] = useState(false)
   const [exportando, setExportando] = useState(false)
+  const [centroMasivo, setCentroMasivo] = useState('')
+  const [cohorteMasiva, setCohorteMasiva] = useState('')
+  const [asignando, setAsignando] = useState(false)
 
   async function cargar() {
     try {
@@ -85,6 +88,44 @@ export default function Estudiantes({ perfil }) {
       setAviso({ tipo: 'error', texto: `No se pudo exportar: ${e.message}` })
     }
     setExportando(false)
+  }
+
+  // Cambia el centro o la cohorte de todos los seleccionados de una vez
+  async function asignarMasivo(campo, valor, nombre) {
+    const ids = [...sel]
+    if (!confirm(`¿Asignar ${nombre} a ${ids.length} estudiante(s)?`)) return
+    setAsignando(true); setAviso(null)
+    const cambio = { [campo]: valor === SIN_COHORTE ? null : Number(valor) }
+    let hechos = 0
+    for (let i = 0; i < ids.length; i += 100) {
+      const lote = ids.slice(i, i + 100)
+      const { error } = await supabase.from('estudiantes').update(cambio).in('id', lote)
+      if (error) { setAviso({ tipo: 'error', texto: `Se actualizaron ${hechos}, pero falló el resto: ${error.message}` }); break }
+      hechos += lote.length
+    }
+    if (hechos === ids.length) setAviso({ tipo: 'ok', texto: `${hechos} estudiante(s) quedaron con ${nombre}.` })
+    setSel(new Set()); setCentroMasivo(''); setCohorteMasiva('')
+    await cargar()
+    setAsignando(false)
+  }
+
+  // A quien no tenga centro, le pone el centro de su cohorte
+  async function completarDesdeCohorte() {
+    const conCentro = cohortes.filter((c) => c.centro_id)
+    const pendientes = lista.filter((e) => !e.centro_id && conCentro.some((c) => c.id === e.cohorte_id)).length
+    if (!pendientes) {
+      setAviso({ tipo: 'ok', texto: 'No hay estudiantes sin centro cuya cohorte tenga centro asignado. Asigna primero el centro a cada cohorte en Configuración.' })
+      return
+    }
+    if (!confirm(`Se asignará el centro de su cohorte a ${pendientes} estudiante(s) que aún no tienen centro. ¿Continuar?`)) return
+    setAsignando(true); setAviso(null)
+    for (const c of conCentro) {
+      const { error } = await supabase.from('estudiantes').update({ centro_id: c.centro_id }).eq('cohorte_id', c.id).is('centro_id', null)
+      if (error) { setAviso({ tipo: 'error', texto: error.message }); break }
+    }
+    await cargar()
+    setAviso((a) => a ?? { tipo: 'ok', texto: `Listo: ${pendientes} estudiante(s) quedaron con el centro de su cohorte.` })
+    setAsignando(false)
   }
 
   async function eliminar() {
@@ -177,6 +218,11 @@ export default function Estudiantes({ perfil }) {
             {exportando ? 'Preparando Excel…' : sel.size ? `Exportar ${sel.size} a Excel` : `Exportar ${filtrados.length} a Excel`}
           </button>
         )}
+        {admin && lista.some((e) => !e.centro_id) && (
+          <button onClick={completarDesdeCohorte} disabled={asignando} className="btn-sec">
+            Poner a cada estudiante el centro de su cohorte
+          </button>
+        )}
         {admin && sel.size > 0 && (
           <>
             <button onClick={eliminar} disabled={eliminando}
@@ -187,6 +233,36 @@ export default function Estudiantes({ perfil }) {
           </>
         )}
       </div>
+
+      {admin && sel.size > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-mariano/30 bg-cielo p-3 text-sm">
+          <strong className="text-mariano">{sel.size} seleccionado(s):</strong>
+          <span className="flex items-center gap-2">
+            Asignar centro
+            <select className="campo w-auto py-1" value={centroMasivo} onChange={(e) => setCentroMasivo(e.target.value)} aria-label="Centro para los seleccionados">
+              <option value="">Elige…</option>
+              {centros.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              <option value={SIN_COHORTE}>Quitar centro</option>
+            </select>
+            <button className="btn py-1" disabled={!centroMasivo || asignando}
+              onClick={() => asignarMasivo('centro_id', centroMasivo, centroMasivo === SIN_COHORTE ? 'sin centro' : `el centro ${centros.find((c) => String(c.id) === centroMasivo)?.nombre}`)}>
+              Aplicar
+            </button>
+          </span>
+          <span className="flex items-center gap-2">
+            Asignar cohorte
+            <select className="campo w-auto py-1" value={cohorteMasiva} onChange={(e) => setCohorteMasiva(e.target.value)} aria-label="Cohorte para los seleccionados">
+              <option value="">Elige…</option>
+              {cohortes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              <option value={SIN_COHORTE}>Quitar cohorte</option>
+            </select>
+            <button className="btn py-1" disabled={!cohorteMasiva || asignando}
+              onClick={() => asignarMasivo('cohorte_id', cohorteMasiva, cohorteMasiva === SIN_COHORTE ? 'sin cohorte' : `la cohorte ${cohortes.find((c) => String(c.id) === cohorteMasiva)?.nombre}`)}>
+              Aplicar
+            </button>
+          </span>
+        </div>
+      )}
 
       {aviso && <p className={`mb-4 text-sm ${aviso.tipo === 'error' ? 'text-alerta' : 'text-green-700'}`}>{aviso.texto}</p>}
 
