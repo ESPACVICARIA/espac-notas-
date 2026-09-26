@@ -156,18 +156,22 @@ function TablaSemestre({ s, espacios, notas, formador }) {
 }
 
 // Dos páginas: semestres 1-2 y 3-4, como la hoja física
-export function HojaItinerario({ est, espacios, notas, formadores = {} }) {
+export function HojaItinerario({ est, espacios, notas, formadores = {}, solo = null }) {
+  const lista = solo ?? [1, 2, 3, 4]
+  const paginas = []
+  for (let i = 0; i < lista.length; i += 2) paginas.push(lista.slice(i, i + 2))
+  const completo = !solo
   const general = promedio([1, 2, 3, 4].map((s) =>
     promedio(espacios.filter((e) => e.semestre === s && (e.activo !== false || notas[e.id])).map((e) => definitiva(notas[e.id])))))
   return (
     <>
-      {[[1, 2], [3, 4]].map((par, i) => (
+      {paginas.map((par, i) => (
         <Hoja key={i}>
           <Encabezado />
           <h2 className="mt-6 text-center font-sans text-[15px] font-bold uppercase">Seguimiento del itinerario formativo</h2>
           <Linea etiqueta="Nombre del estudiante" valor={est.nombre_completo} className="mt-6" />
           {par.map((s) => <TablaSemestre key={s} s={s} espacios={espacios} notas={notas} formador={formadores[s]} />)}
-          {i === 1 && (
+          {completo && i === paginas.length - 1 && (
             <div className="mt-10 flex justify-end">
               <div className="flex items-center gap-3 border-2 border-tinta px-4 py-2">
                 <span className="text-[12px] font-bold uppercase">Promedio del itinerario</span>
