@@ -13,6 +13,8 @@ export default function Estudiantes({ perfil }) {
   const [busqueda, setBusqueda] = useState('')
   const [filtroCohorte, setFiltroCohorte] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroCentro, setFiltroCentro] = useState('')
+  const [centros, setCentros] = useState([])
   const [orden, setOrden] = useState('apellidos')
   const [agrupar, setAgrupar] = useState(true)
   const [cargando, setCargando] = useState(true)
@@ -23,13 +25,15 @@ export default function Estudiantes({ perfil }) {
 
   async function cargar() {
     try {
-      const [ests, { data: cs }] = await Promise.all([
+      const [ests, { data: cs }, { data: ce }] = await Promise.all([
         traerTodo(() => supabase.from('estudiantes')
-          .select('id, nombre_completo, numero_id, parroquia, estado, cohorte_id, cohortes(nombre)').order('id')),
-        supabase.from('cohortes').select('id, nombre, anio, semestre_actual').order('anio', { ascending: false }).order('nombre'),
+          .select('id, nombre_completo, numero_id, parroquia, estado, cohorte_id, centro_id, cohortes(nombre), centros!estudiantes_centro_id_fkey(nombre)').order('id')),
+        supabase.from('cohortes').select('id, nombre, anio, semestre_actual, centro_id, centros!cohortes_centro_id_fkey(nombre)').order('anio', { ascending: false }).order('nombre'),
+        supabase.from('centros').select('id, nombre').order('nombre'),
       ])
       setLista(ests)
       setCohortes(cs ?? [])
+      setCentros(ce ?? [])
     } catch (e) {
       setAviso({ tipo: 'error', texto: `No se pudieron cargar los estudiantes: ${e.message}` })
     }
@@ -42,10 +46,11 @@ export default function Estudiantes({ perfil }) {
     const res = lista.filter((e) => {
       if (filtroCohorte === SIN_COHORTE ? e.cohorte_id : filtroCohorte && String(e.cohorte_id) !== filtroCohorte) return false
       if (filtroEstado && e.estado !== filtroEstado) return false
+      if (filtroCentro === SIN_COHORTE ? e.centro_id : filtroCentro && String(e.centro_id) !== filtroCentro) return false
       return !q || e.nombre_completo.toLowerCase().includes(q) || (e.numero_id ?? '').toLowerCase().includes(q)
     })
     return ordenarEstudiantes(res, orden)
-  }, [lista, busqueda, filtroCohorte, filtroEstado, orden])
+  }, [lista, busqueda, filtroCohorte, filtroEstado, filtroCentro, orden])
 
   // Grupos en el mismo orden de las cohortes (más recientes primero); "Sin cohorte" al final
   const grupos = useMemo(() => {
@@ -57,7 +62,7 @@ export default function Estudiantes({ perfil }) {
       porCohorte.get(k).push(e)
     }
     const res = cohortes.filter((c) => porCohorte.has(c.id))
-      .map((c) => ({ clave: c.id, titulo: `${c.nombre}${c.anio ? ` (${c.anio})` : ''}${c.semestre_actual ? ` · Semestre ${c.semestre_actual} en curso` : ''}`, items: porCohorte.get(c.id) }))
+      .map((c) => ({ clave: c.id, titulo: `${c.nombre}${c.anio ? ` (${c.anio})` : ''}${c.centros?.nombre ? ` · ${c.centros.nombre}` : ''}${c.semestre_actual ? ` · Semestre ${c.semestre_actual} en curso` : ''}`, items: porCohorte.get(c.id) }))
     if (porCohorte.has(SIN_COHORTE)) res.push({ clave: SIN_COHORTE, titulo: 'Sin cohorte', items: porCohorte.get(SIN_COHORTE) })
     return res
   }, [agrupar, filtrados, cohortes])
@@ -104,8 +109,8 @@ export default function Estudiantes({ perfil }) {
     setEliminando(false)
   }
 
-  const hayFiltros = busqueda || filtroCohorte || filtroEstado
-  const limpiar = () => { setBusqueda(''); setFiltroCohorte(''); setFiltroEstado('') }
+  const hayFiltros = busqueda || filtroCohorte || filtroEstado || filtroCentro
+  const limpiar = () => { setBusqueda(''); setFiltroCohorte(''); setFiltroEstado(''); setFiltroCentro('') }
 
   return (
     <section>
@@ -119,17 +124,25 @@ export default function Estudiantes({ perfil }) {
         {admin && <Link to="/estudiantes/nuevo" className="btn">Matricular estudiante</Link>}
       </div>
 
-      <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
         <div>
           <label className="etiqueta" htmlFor="buscar">Buscar</label>
           <input id="buscar" className="campo" placeholder="Nombre o documento"
             value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
         </div>
         <div>
+          <label className="etiqueta" htmlFor="fcen">Centro</label>
+          <select id="fcen" className="campo" value={filtroCentro} onChange={(e) => setFiltroCentro(e.target.value)}>
+            <option value="">Todos los centros</option>
+            {centros.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            <option value={SIN_COHORTE}>Sin centro</option>
+          </select>
+        </div>
+        <div>
           <label className="etiqueta" htmlFor="fcoh">Cohorte</label>
           <select id="fcoh" className="campo" value={filtroCohorte} onChange={(e) => setFiltroCohorte(e.target.value)}>
             <option value="">Todas las cohortes</option>
-            {cohortes.map((c) => <option key={c.id} value={c.id}>{c.nombre}{c.anio ? ` (${c.anio})` : ''}</option>)}
+            {cohortes.filter((c) => !filtroCentro || filtroCentro === SIN_COHORTE || String(c.centro_id) === filtroCentro).map((c) => <option key={c.id} value={c.id}>{c.nombre}{c.anio ? ` (${c.anio})` : ''}</option>)}
             <option value={SIN_COHORTE}>Sin cohorte</option>
           </select>
         </div>
@@ -149,7 +162,7 @@ export default function Estudiantes({ perfil }) {
             <option value="nombres">Nombres</option>
           </select>
         </div>
-        <div className="flex flex-wrap items-center gap-4 sm:col-span-2 lg:col-span-4">
+        <div className="flex flex-wrap items-center gap-4 sm:col-span-2 lg:col-span-5">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={agrupar} onChange={(e) => setAgrupar(e.target.checked)} />
             Agrupar por cohorte
@@ -202,7 +215,7 @@ export default function Estudiantes({ perfil }) {
                             checked={todos} onChange={() => alternarVarios(g.items)} />
                         </th>
                       )}
-                      <th className="p-3">Nombre</th><th className="p-3">Documento</th><th className="p-3">Parroquia</th>
+                      <th className="p-3">Nombre</th><th className="p-3">Documento</th><th className="p-3">Centro</th><th className="p-3">Parroquia</th>
                       {!agrupar && <th className="p-3">Cohorte</th>}
                       <th className="p-3">Estado</th>
                     </tr>
@@ -217,6 +230,7 @@ export default function Estudiantes({ perfil }) {
                         )}
                         <td className="p-3"><Link to={`/estudiantes/${e.id}`} className="font-medium text-mariano hover:underline">{mostrarNombre(e, orden)}</Link></td>
                         <td className="p-3 tabular-nums">{e.numero_id}</td>
+                        <td className="p-3">{e.centros?.nombre ?? '—'}</td>
                         <td className="p-3">{e.parroquia}</td>
                         {!agrupar && <td className="p-3">{e.cohortes?.nombre ?? '—'}</td>}
                         <td className="p-3 capitalize">{e.estado}</td>
