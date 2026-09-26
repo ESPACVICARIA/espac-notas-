@@ -26,7 +26,7 @@ export default function Estudiantes({ perfil }) {
       const [ests, { data: cs }] = await Promise.all([
         traerTodo(() => supabase.from('estudiantes')
           .select('id, nombre_completo, numero_id, parroquia, estado, cohorte_id, cohortes(nombre)').order('id')),
-        supabase.from('cohortes').select('id, nombre, anio').order('anio', { ascending: false }).order('nombre'),
+        supabase.from('cohortes').select('id, nombre, anio, semestre_actual').order('anio', { ascending: false }).order('nombre'),
       ])
       setLista(ests)
       setCohortes(cs ?? [])
@@ -57,7 +57,7 @@ export default function Estudiantes({ perfil }) {
       porCohorte.get(k).push(e)
     }
     const res = cohortes.filter((c) => porCohorte.has(c.id))
-      .map((c) => ({ clave: c.id, titulo: `${c.nombre}${c.anio ? ` (${c.anio})` : ''}`, items: porCohorte.get(c.id) }))
+      .map((c) => ({ clave: c.id, titulo: `${c.nombre}${c.anio ? ` (${c.anio})` : ''}${c.semestre_actual ? ` · Semestre ${c.semestre_actual} en curso` : ''}`, items: porCohorte.get(c.id) }))
     if (porCohorte.has(SIN_COHORTE)) res.push({ clave: SIN_COHORTE, titulo: 'Sin cohorte', items: porCohorte.get(SIN_COHORTE) })
     return res
   }, [agrupar, filtrados, cohortes])
