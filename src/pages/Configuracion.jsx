@@ -14,6 +14,7 @@ const SECCIONES = [
   ['usuarios', 'Usuarios y roles', 'Crear cuentas, roles, nombres y contraseñas'],
   ['asignaciones', 'Asignación de formadores', 'Qué docente dicta cada semestre'],
   ['cohortes', 'Cohortes', 'Grupos, semestre en curso y visibilidad de notas'],
+  ['centros', 'Centros de formación', 'Sedes como Suba y Cota'],
 ]
 
 export default function Configuracion() {
@@ -23,6 +24,9 @@ export default function Configuracion() {
   const [nueva, setNueva] = useState({ nombre: '', anio: new Date().getFullYear() })
   const [asig, setAsig] = useState({ formador_id: '', cohorte_id: '', semestre: '1' })
   const [error, setError] = useState('')
+  const [centros, setCentros] = useState([])
+  const [nuevoCentro, setNuevoCentro] = useState('')
+  const [centroEdit, setCentroEdit] = useState(null)
   const [params, setParams] = useSearchParams()
   const seccion = SECCIONES.some(([k]) => k === params.get('seccion')) ? params.get('seccion') : 'usuarios'
   const irA = (k) => { setError(''); setParams({ seccion: k }, { replace: true }) }
@@ -35,12 +39,13 @@ export default function Configuracion() {
   async function cargar() {
     const { data: s } = await supabase.auth.getSession()
     setYo(s.session?.user.id ?? null)
-    const [c, p, a] = await Promise.all([
-      supabase.from('cohortes').select('*, estudiantes(count)').order('anio', { ascending: false }),
+    const [c, p, a, ce] = await Promise.all([
+      supabase.from('cohortes').select('*, estudiantes!estudiantes_cohorte_id_fkey(count)').order('anio', { ascending: false }),
       supabase.from('perfiles').select('*').order('nombre'),
       supabase.from('asignaciones').select('*, perfiles(nombre, correo), cohortes(nombre)').order('semestre'),
+      supabase.from('centros').select('*, estudiantes!estudiantes_centro_id_fkey(count), cohortes!cohortes_centro_id_fkey(count), perfiles!perfiles_centro_id_fkey(count)').order('nombre'),
     ])
-    setCohortes(c.data ?? []); setPerfiles(p.data ?? []); setAsignaciones(a.data ?? [])
+    setCohortes(c.data ?? []); setPerfiles(p.data ?? []); setAsignaciones(a.data ?? []); setCentros(ce.data ?? [])
   }
   useEffect(() => { cargar() }, [])
 
@@ -74,6 +79,24 @@ export default function Configuracion() {
     }
   }
 
+  async function crearCentro(e) {
+    e.preventDefault()
+    if (!nuevoCentro.trim()) return
+    await ejecutar(supabase.from('centros').insert({ nombre: nuevoCentro.trim() }))
+    setNuevoCentro('')
+  }
+  async function guardarCentro() {
+    if (!centroEdit.nombre.trim()) { setError('El centro necesita un nombre.'); return }
+    await ejecutar(supabase.from('centros').update({ nombre: centroEdit.nombre.trim() }).eq('id', centroEdit.id))
+    setCentroEdit(null)
+  }
+  function eliminarCentro(c) {
+    const n = (r) => c[r]?.[0]?.count ?? 0
+    const usado = n('estudiantes') + n('cohortes') + n('perfiles')
+    if (!confirm(`¿Eliminar el centro "${c.nombre}"?${usado ? `\n\nTiene ${n('estudiantes')} estudiante(s), ${n('cohortes')} cohorte(s) y ${n('perfiles')} docente(s). No se borran: quedarán "sin centro".` : ''}`)) return
+    ejecutar(supabase.from('centros').delete().eq('id', c.id))
+  }
+
   async function guardarNombre() {
     if (!nombreEdit.nombre.trim()) { setError('Escribe el nombre como debe aparecer.'); return }
     await ejecutar(supabase.from('perfiles').update({ nombre: nombreEdit.nombre.trim() }).eq('id', nombreEdit.id))
@@ -105,6 +128,7 @@ export default function Configuracion() {
     usuarios: perfiles.filter((p) => p.rol !== 'estudiante').length,
     asignaciones: asignaciones.length,
     cohortes: cohortes.length,
+    centros: centros.length,
   }
 
   return (
@@ -153,6 +177,14 @@ export default function Configuracion() {
                   <span className="flex-1">
                     {c.nombre} <span className="text-slate-500">({c.anio ?? 'sin año'}) · {c.estudiantes?.[0]?.count ?? 0} estudiantes</span>
                   </span>
+                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                    Centro
+                    <select className="campo w-auto py-1" value={c.centro_id ?? ''}
+                      onChange={(e) => ejecutar(supabase.from('cohortes').update({ centro_id: e.target.value ? Number(e.target.value) : null }).eq('id', c.id))}>
+                      <option value="">Sin centro</option>
+                      {centros.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+                    </select>
+                  </label>
                   <label className="flex items-center gap-2 text-xs text-slate-600">
                     Semestre en curso
                     <select className="campo w-auto py-1" value={c.semestre_actual ?? ''}
@@ -248,6 +280,13 @@ export default function Configuracion() {
                           </td>
                           <td className="py-2 pr-4 text-right">
                             <div className="flex items-center justify-end gap-3">
+                              {p.rol !== 'estudiante' && (
+                                <select className="campo w-32 py-1 text-xs" aria-label={`Centro de ${p.nombre || p.correo}`} value={p.centro_id ?? ''}
+                                  onChange={(e) => ejecutar(supabase.from('perfiles').update({ centro_id: e.target.value ? Number(e.target.value) : null }).eq('id', p.id))}>
+                                  <option value="">Todos los centros</option>
+                                  {centros.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+                                </select>
+                              )}
                               <select className="campo w-40" value={p.rol} disabled={esYo}
                                 onChange={(e) => ejecutar(supabase.from('perfiles').update({ rol: e.target.value }).eq('id', p.id))}>
                                 <option value="admin">Coordinación</option><option value="formador">Docente (formador)</option><option value="estudiante">Estudiante</option>
@@ -296,6 +335,40 @@ export default function Configuracion() {
               <button className="text-xs text-alerta underline" onClick={() => ejecutar(supabase.from('asignaciones').delete().eq('id', a.id))}>Quitar</button>
             </li>
           ))}
+        </ul>
+      </div>)}
+      {seccion === 'centros' && (<div>
+        <h2 className="mb-1 text-xl font-semibold">Centros de formación</h2>
+        <p className="mb-3 text-sm text-slate-500">Cada estudiante, cohorte y docente puede pertenecer a un centro. Así puedes filtrar y organizar por sede.</p>
+        <form className="mb-4 flex flex-wrap gap-2" onSubmit={crearCentro}>
+          <input className="campo max-w-xs" placeholder="Nombre del centro" value={nuevoCentro} onChange={(e) => setNuevoCentro(e.target.value)} />
+          <button className="btn">Crear centro</button>
+        </form>
+        <ul className="rounded-lg border border-slate-200 bg-white text-sm">
+          {centros.map((c) => (
+            <li key={c.id} className="flex flex-wrap items-center gap-3 border-t border-slate-100 px-4 py-3 first:border-t-0">
+              {centroEdit?.id === c.id ? (
+                <>
+                  <input className="campo max-w-xs" autoFocus value={centroEdit.nombre}
+                    onChange={(e) => setCentroEdit({ ...centroEdit, nombre: e.target.value })}
+                    onKeyDown={(e) => e.key === 'Enter' && guardarCentro()} />
+                  <button className="btn py-1" onClick={guardarCentro}>Guardar</button>
+                  <button className="text-sm text-slate-500 underline" onClick={() => setCentroEdit(null)}>Cancelar</button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 font-medium">{c.nombre}
+                    <span className="ml-2 font-normal text-slate-500">
+                      {c.estudiantes?.[0]?.count ?? 0} estudiantes · {c.cohortes?.[0]?.count ?? 0} cohortes · {c.perfiles?.[0]?.count ?? 0} docentes
+                    </span>
+                  </span>
+                  <button className="text-xs font-semibold text-mariano underline" onClick={() => setCentroEdit({ id: c.id, nombre: c.nombre })}>Modificar</button>
+                  <button className="text-xs font-semibold text-alerta underline" onClick={() => eliminarCentro(c)}>Eliminar</button>
+                </>
+              )}
+            </li>
+          ))}
+          {centros.length === 0 && <li className="p-4 text-slate-500">Aún no hay centros.</li>}
         </ul>
       </div>)}
         </div>
