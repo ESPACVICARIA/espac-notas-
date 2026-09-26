@@ -14,6 +14,7 @@ import Importar from './pages/Importar'
 import Imprimir from './pages/Imprimir'
 import Modulos from './pages/Modulos'
 import Biblioteca from './pages/Biblioteca'
+import Mensajes from './pages/Mensajes'
 
 export default function App() {
   const { sesion, perfil, cargando } = useSesion()
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/estudiantes/:id/editar" element={admin ? <EstudianteForm /> : <Navigate to="/" />} />
         <Route path="/notas" element={puedeCalificar ? <Digitacion perfil={perfil} /> : <Navigate to="/" />} />
         <Route path="/importar" element={admin ? <Importar /> : <Navigate to="/" />} />
+        <Route path="/mensajes" element={puedeCalificar ? <Mensajes perfil={perfil} /> : <Navigate to="/" />} />
         <Route path="/documentos" element={puedeCalificar ? <Biblioteca perfil={perfil} /> : <Navigate to="/" />} />
         <Route path="/modulos" element={admin ? <Modulos /> : <Navigate to="/" />} />
         <Route path="/configuracion" element={admin ? <Configuracion /> : <Navigate to="/" />} />
