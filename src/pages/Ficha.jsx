@@ -18,7 +18,7 @@ export default function Ficha({ perfil }) {
   const [formadores, setFormadores] = useState({})
 
   useEffect(() => {
-    supabase.from('estudiantes').select('*, cohortes(nombre)').eq('id', id).single().then(async ({ data }) => {
+    supabase.from('estudiantes').select('*, cohortes(nombre), centros!estudiantes_centro_id_fkey(nombre)').eq('id', id).single().then(async ({ data }) => {
       setEst(data)
       if (data?.cohorte_id) {
         const { data: f } = await supabase.rpc('formadores_cohorte', { p_cohorte: data.cohorte_id })
@@ -52,7 +52,7 @@ export default function Ficha({ perfil }) {
 
   const datos = [
     ['Documento', `${est.tipo_id ?? ''} ${est.numero_id ?? ''}`], ['Parroquia', est.parroquia], ['Centro de formación', est.centro_formacion],
-    ['Cohorte', est.cohortes?.nombre], ['Fecha de matrícula', fecha(est.fecha_matricula)], ['Nacimiento', `${est.lugar_nacimiento ?? '—'}, ${fecha(est.fecha_nacimiento)}`],
+    ['Centro (sede)', est.centros?.nombre], ['Cohorte', est.cohortes?.nombre], ['Fecha de matrícula', fecha(est.fecha_matricula)], ['Nacimiento', `${est.lugar_nacimiento ?? '—'}, ${fecha(est.fecha_nacimiento)}`],
     ['Dirección', est.direccion], ['Barrio', est.barrio], ['Teléfono', est.telefono], ['Correo electrónico', est.correo], ['Ocupación', est.ocupacion],
     ['Nivel escolar', est.nivel_escolar], ['Estudio universitario o técnico', est.estudio_superior], ['Estado', est.estado], ['Observaciones', est.observaciones],
   ]
