@@ -114,6 +114,11 @@ export default function Configuracion() {
                       {[1, 2, 3, 4].map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-600" title="Si está desactivado, los estudiantes solo ven el semestre en curso">
+                    <input type="checkbox" checked={!!c.ver_todas_notas}
+                      onChange={(e) => ejecutar(supabase.from('cohortes').update({ ver_todas_notas: e.target.checked }).eq('id', c.id))} />
+                    Estudiantes pueden ver todas sus notas
+                  </label>
                   <button className="text-xs font-semibold text-mariano underline" onClick={() => setEditando({ id: c.id, nombre: c.nombre, anio: c.anio })}>Modificar</button>
                   <button className="text-xs font-semibold text-alerta underline" onClick={() => eliminarCohorte(c)}>Eliminar</button>
                 </>
