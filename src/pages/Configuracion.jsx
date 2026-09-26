@@ -106,6 +106,14 @@ export default function Configuracion() {
                   <span className="flex-1">
                     {c.nombre} <span className="text-slate-500">({c.anio ?? 'sin año'}) · {c.estudiantes?.[0]?.count ?? 0} estudiantes</span>
                   </span>
+                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                    Semestre en curso
+                    <select className="campo w-auto py-1" value={c.semestre_actual ?? ''}
+                      onChange={(e) => ejecutar(supabase.from('cohortes').update({ semestre_actual: e.target.value ? Number(e.target.value) : null }).eq('id', c.id))}>
+                      <option value="">Sin definir</option>
+                      {[1, 2, 3, 4].map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </label>
                   <button className="text-xs font-semibold text-mariano underline" onClick={() => setEditando({ id: c.id, nombre: c.nombre, anio: c.anio })}>Modificar</button>
                   <button className="text-xs font-semibold text-alerta underline" onClick={() => eliminarCohorte(c)}>Eliminar</button>
                 </>
