@@ -13,6 +13,8 @@ export default function Importar() {
   const [modo, setModo] = useState('excel')
   const [cohortes, setCohortes] = useState([])
   const [cohorte, setCohorte] = useState('')
+  const [centros, setCentros] = useState([])
+  const [centro, setCentro] = useState('')
   const [actualizar, setActualizar] = useState(true)
   const [lista, setLista] = useState('')
   const [filas, setFilas] = useState(null)
@@ -22,6 +24,7 @@ export default function Importar() {
 
   useEffect(() => {
     supabase.from('cohortes').select('*').order('anio', { ascending: false }).then(({ data }) => setCohortes(data ?? []))
+    supabase.from('centros').select('*').order('nombre').then(({ data }) => setCentros(data ?? []))
   }, [])
 
   function reiniciar() { setFilas(null); setAviso(''); setResultado(null) }
@@ -77,15 +80,20 @@ export default function Importar() {
   async function importar() {
     setTrabajando(true)
     const cohorteId = cohorte ? Number(cohorte) : null
+    const cohorteElegida = cohortes.find((c) => c.id === cohorteId)
+    const centroId = centro ? Number(centro) : cohorteElegida?.centro_id ?? null
+    // Si una fila trae "Centro de formación" con el nombre de un centro (Suba, Cota…), se usa ese
+    const centroDeFila = (texto) => centros.find((c) => texto && texto.toLowerCase().includes(c.nombre.toLowerCase()))?.id ?? null
     let creados = 0, actualizados = 0
     const fallidos = []
 
     const nuevos = filas.filter((f) => f.estado === 'nuevo')
     for (let i = 0; i < nuevos.length; i += 100) {
       const lote = nuevos.slice(i, i + 100)
-      const registros = lote.map((f) => ({ ...ESTUDIANTE_VACIO, ...f.datos, cohorte_id: cohorteId }))
+      const registros = lote.map((f) => ({ ...ESTUDIANTE_VACIO, ...f.datos, cohorte_id: cohorteId, centro_id: centroDeFila(f.datos.centro_formacion) ?? centroId }))
       const { error } = await supabase.from('estudiantes').insert(registros)
       if (!error) { creados += lote.length; continue }
+      // Si el lote falla, se intenta uno por uno para identificar la fila con problema
       for (let j = 0; j < lote.length; j++) {
         const r = await supabase.from('estudiantes').insert(registros[j])
         if (r.error) fallidos.push({ fila: lote[j].fila, nombre: lote[j].datos.nombre_completo, motivo: r.error.message })
@@ -97,6 +105,8 @@ export default function Importar() {
       for (const f of filas.filter((x) => x.estado === 'existe')) {
         const { numero_id, ...cambios } = f.datos
         if (cohorteId) cambios.cohorte_id = cohorteId
+        const cf = centroDeFila(cambios.centro_formacion) ?? (centro ? Number(centro) : null)
+        if (cf) cambios.centro_id = cf
         const { error } = await supabase.from('estudiantes').update(cambios).eq('id', f.id)
         if (error) fallidos.push({ fila: f.fila, nombre: f.datos.nombre_completo, motivo: error.message })
         else actualizados++
@@ -133,6 +143,13 @@ export default function Importar() {
           <select id="coh" className="campo" value={cohorte} onChange={(e) => setCohorte(e.target.value)}>
             <option value="">Sin asignar</option>
             {cohortes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="etiqueta" htmlFor="cen">Centro de formación</label>
+          <select id="cen" className="campo" value={centro} onChange={(e) => setCentro(e.target.value)}>
+            <option value="">{cohorte && cohortes.find((c) => String(c.id) === cohorte)?.centro_id ? 'El de la cohorte elegida' : 'Sin centro'}</option>
+            {centros.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </div>
         <label className="flex items-center gap-2 self-end pb-2 text-sm">
