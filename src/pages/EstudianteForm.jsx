@@ -58,7 +58,9 @@ export default function EstudianteForm() {
   return (
     <form onSubmit={guardar} className="max-w-3xl">
       <h1 className="text-3xl font-semibold">{id ? 'Editar hoja de vida' : 'Matricular estudiante'}</h1>
-      <p className="mb-8 text-sm text-slate-500">Formulario de matrícula-inscripción · Datos generales y personales</p>
+      <p className="mb-8 text-sm text-slate-500">
+        Formulario de matrícula-inscripción · Datos generales y personales. La foto se sube desde la ficha del estudiante, después de guardar.
+      </p>
 
       <fieldset className="grid gap-4 sm:grid-cols-2">
         <Campo label="Nombre completo" name="nombre_completo" required className="sm:col-span-2" {...p} />
