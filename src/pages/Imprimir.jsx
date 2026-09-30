@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { HojaMatricula, HojaItinerario, BarraImpresion } from '../components/Documentos'
+import { urlFoto } from '../lib/fotos'
 
 export default function Imprimir() {
   const { id } = useParams()
@@ -18,7 +19,7 @@ export default function Imprimir() {
         supabase.from('espacios').select('*').order('semestre').order('orden').order('id'),
         supabase.from('notas').select('*').eq('estudiante_id', id),
       ])
-      setEst(e); setEspacios(esp ?? [])
+      setEst(e ? { ...e, foto_url: await urlFoto(e.foto_url) } : e); setEspacios(esp ?? [])
       setNotas(Object.fromEntries((ns ?? []).map((n) => [n.espacio_id, n])))
       if (e?.cohorte_id) {
         const { data: f } = await supabase.rpc('formadores_cohorte', { p_cohorte: e.cohorte_id })
