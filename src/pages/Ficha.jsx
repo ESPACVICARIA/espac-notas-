@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { fmt } from '../lib/notas'
 import { resumen, Camino, TablasSemestres } from '../components/Itinerario'
+import FotoEstudiante from '../components/FotoEstudiante'
 
 const fecha = (f) => (f ? new Date(f + 'T00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }) : '—')
 
@@ -16,6 +17,7 @@ export default function Ficha({ perfil }) {
   const [pestana, setPestana] = useState('itinerario')
   const [aviso, setAviso] = useState(null)
   const [formadores, setFormadores] = useState({})
+  const [acceso, setAcceso] = useState(null)
 
   useEffect(() => {
     supabase.from('estudiantes').select('*, cohortes(nombre), centros!estudiantes_centro_id_fkey(nombre)').eq('id', id).single().then(async ({ data }) => {
@@ -26,6 +28,7 @@ export default function Ficha({ perfil }) {
       }
     })
     supabase.from('espacios').select('*').order('semestre').order('orden').order('id').then(({ data }) => setEspacios(data ?? []))
+    if (admin) supabase.rpc('estado_acceso_estudiante', { p_estudiante: id }).then(({ data }) => setAcceso(data ?? null))
     supabase.from('notas').select('*').eq('estudiante_id', id)
       .then(({ data }) => setNotas(Object.fromEntries((data ?? []).map((n) => [n.espacio_id, n]))))
   }, [id])
@@ -35,7 +38,8 @@ export default function Ficha({ perfil }) {
     const { error } = await supabase.rpc('restablecer_clave_estudiante', { p_estudiante: id })
     setAviso(error
       ? { tipo: 'error', texto: `No se pudo restablecer: ${error.message}` }
-      : { tipo: 'ok', texto: 'Contraseña restablecida. Ahora es su número de documento y deberá cambiarla al entrar.' })
+      : { tipo: 'ok', texto: 'Contraseña restablecida y acceso desbloqueado. Ahora es su número de documento y deberá cambiarla al entrar.' })
+    if (!error) supabase.rpc('estado_acceso_estudiante', { p_estudiante: id }).then(({ data }) => setAcceso(data ?? null))
   }
 
   async function eliminar() {
@@ -60,10 +64,13 @@ export default function Ficha({ perfil }) {
   return (
     <section>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link to="/" className="text-sm text-mariano hover:underline">Volver a estudiantes</Link>
-          <h1 className="mt-2 text-3xl font-semibold">{est.nombre_completo}</h1>
-          <p className="text-sm text-slate-500">{est.parroquia}</p>
+        <div className="flex items-start gap-5">
+          <FotoEstudiante estudiante={est} editable={admin} alCambiar={(ruta) => setEst({ ...est, foto_url: ruta })} />
+          <div>
+            <Link to="/" className="text-sm text-mariano hover:underline">Volver a estudiantes</Link>
+            <h1 className="mt-2 text-3xl font-semibold">{est.nombre_completo}</h1>
+            <p className="text-sm text-slate-500">{est.parroquia}</p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <div className="text-right">
@@ -76,6 +83,18 @@ export default function Ficha({ perfil }) {
           {admin && <button onClick={eliminar} className="inline-flex items-center rounded-md border border-alerta px-4 py-2 text-sm font-semibold text-alerta hover:bg-red-50">Eliminar</button>}
         </div>
       </div>
+
+      {admin && acceso && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm">
+          <strong>Acceso al portal:</strong>
+          {!est.numero_id ? <span className="text-amber-700">No tiene número de documento: no puede entrar. Agrégalo en Editar.</span>
+            : !acceso.existe ? <span className="text-amber-700">Sin acceso creado. Pulsa "Restablecer contraseña" para activarlo.</span>
+            : acceso.bloqueado ? <span className="text-alerta">Bloqueado por intentos fallidos. Pulsa "Restablecer contraseña" para desbloquearlo.</span>
+            : acceso.debe_cambiar ? <span className="text-slate-700">Aún no ha entrado: su contraseña es su número de documento, <strong>{est.numero_id}</strong>.</span>
+            : <span className="text-slate-700">Ya creó su propia contraseña. Si la olvidó, restablécela.</span>}
+          {acceso.existe && acceso.intentos > 0 && !acceso.bloqueado && <span className="text-xs text-slate-500">({acceso.intentos} intento(s) fallido(s))</span>}
+        </div>
+      )}
 
       {aviso && <p className={`mb-6 text-sm ${aviso.tipo === 'error' ? 'text-alerta' : 'text-green-700'}`}>{aviso.texto}</p>}
 
