@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Logos from '../components/Logos'
+import CampoClave from '../components/CampoClave'
 
 export default function Login({ onEstudiante }) {
   const [modo, setModo] = useState('estudiante')
@@ -18,10 +19,10 @@ export default function Login({ onEstudiante }) {
       const { error } = await supabase.auth.signInWithPassword({ email: usuario.trim(), password: clave })
       if (error) setError('Correo o contraseña incorrectos. Verifica los datos o pide acceso a la coordinación.')
     } else {
-      const { data, error } = await supabase.rpc('portal_estudiante', { p_documento: usuario, p_clave: clave })
+      const { data, error } = await supabase.rpc('portal_estudiante', { p_documento: usuario.trim(), p_clave: clave.trim() })
       if (error) setError('No se pudo conectar con la plataforma. Revisa tu internet e intenta de nuevo.')
       else if (data?.error) setError(data.error)
-      else onEstudiante({ datos: data, documento: usuario, clave })
+      else onEstudiante({ datos: data, documento: usuario.trim(), clave: clave.trim() })
     }
     setEnviando(false)
   }
@@ -53,7 +54,7 @@ export default function Login({ onEstudiante }) {
           value={usuario} onChange={(e) => setUsuario(e.target.value)} />
 
         <label className="etiqueta" htmlFor="clave">Contraseña</label>
-        <input id="clave" type="password" required className="campo mb-2" autoComplete="current-password"
+        <CampoClave id="clave" required className="mb-2" autoComplete="current-password"
           value={clave} onChange={(e) => setClave(e.target.value)} />
         {modo === 'estudiante' && (
           <p className="mb-4 text-xs text-slate-500">La primera vez, tu contraseña es tu mismo número de documento.</p>
