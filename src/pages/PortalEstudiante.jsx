@@ -7,6 +7,9 @@ import { HojaItinerario, BarraImpresion } from '../components/Documentos'
 import ListaDocumentos from '../components/ListaDocumentos'
 import PortalAutoevaluaciones from '../components/PortalAutoevaluaciones'
 import PortalMensajes from '../components/PortalMensajes'
+import PortalRepasos from '../components/PortalRepasos'
+import PortalEstudio from '../components/PortalEstudio'
+import CampoClave from '../components/CampoClave'
 
 function CambioClave({ documento, clave, alCambiar }) {
   const [nueva, setNueva] = useState('')
@@ -33,10 +36,10 @@ function CambioClave({ documento, clave, alCambiar }) {
         Es tu primer ingreso. Elige una contraseña propia para que solo tú puedas ver tus notas.
       </p>
       <label className="etiqueta" htmlFor="nueva">Nueva contraseña</label>
-      <input id="nueva" type="password" required minLength={6} className="campo mb-4" autoComplete="new-password"
+      <CampoClave id="nueva" required minLength={6} className="mb-4" autoComplete="new-password"
         value={nueva} onChange={(e) => setNueva(e.target.value)} />
       <label className="etiqueta" htmlFor="confirmar">Repite la contraseña</label>
-      <input id="confirmar" type="password" required className="campo mb-2" autoComplete="new-password"
+      <CampoClave id="confirmar" required className="mb-2" autoComplete="new-password"
         value={confirmar} onChange={(e) => setConfirmar(e.target.value)} />
       <p className="mb-4 text-xs text-slate-500">Mínimo 6 caracteres. No puede ser tu número de documento.</p>
       {error && <p className="mb-4 text-sm text-alerta">{error}</p>}
@@ -114,7 +117,7 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
               </div>
             </div>
             <div className="mb-6 flex gap-2 border-b border-slate-200">
-              {[['notas', 'Mis notas'], ['mensajes', `Mensajes${sinLeer ? ` (${sinLeer} nuevo${sinLeer > 1 ? 's' : ''})` : ''}`], ['autoevaluaciones', 'Autoevaluaciones'], ['documentos', `Documentos${datos.documentos?.length ? ` (${datos.documentos.length})` : ''}`]].map(([k, t]) => (
+              {[['notas', 'Mis notas'], ['estudiar', 'Estudiar'], ['mensajes', `Mensajes${sinLeer ? ` (${sinLeer} nuevo${sinLeer > 1 ? 's' : ''})` : ''}`], ['repasos', 'Repasos'], ['autoevaluaciones', 'Autoevaluaciones'], ['documentos', `Documentos${datos.documentos?.length ? ` (${datos.documentos.length})` : ''}`]].map(([k, t]) => (
                 <button key={k} onClick={() => setSeccion(k)}
                   className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${seccion === k ? 'border-mariano text-mariano' : 'border-transparent text-slate-500'}`}>{t}</button>
               ))}
@@ -122,6 +125,10 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
             {seccion === 'mensajes' ? (
               <PortalMensajes mensajes={mensajes} documento={documento} clave={clave}
                 alLeer={(id) => setMensajes((ms) => ms.map((m) => (m.id === id ? { ...m, leido: true } : m)))} />
+            ) : seccion === 'estudiar' ? (
+              <PortalEstudio documento={documento} clave={clave} irARepasos={() => setSeccion('repasos')} />
+            ) : seccion === 'repasos' ? (
+              <PortalRepasos documento={documento} clave={clave} alTerminar={alRecargar} />
             ) : seccion === 'autoevaluaciones' ? (
               <PortalAutoevaluaciones documento={documento} clave={clave} alEnviar={alRecargar} />
             ) : seccion === 'documentos' ? (
