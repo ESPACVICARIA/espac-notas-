@@ -1,18 +1,29 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import TextoFormateado from './TextoFormateado'
-import Video from './Video'
+import BloquesVista from './BloquesVista'
 import ListaDocumentos from './ListaDocumentos'
 
 const TIPO = { modulo: 'Módulo', retiro: 'Retiro', seminario: 'Seminario' }
 
-function Modulo({ m, documento, clave, volver, alLeer, irARepasos }) {
-  const [actual, setActual] = useState(m.lecciones.find((l) => !l.leida) ?? m.lecciones[0] ?? null)
+function Modulo({ m, documento, clave, volver, alLeer, alReflexion, irARepasos }) {
+  const [actualId, setActualId] = useState((m.lecciones.find((l) => !l.leida) ?? m.lecciones[0])?.id ?? null)
+  const actual = m.lecciones.find((l) => l.id === actualId) ?? null
+  const setActual = (l) => setActualId(l?.id ?? null)
   const [marcando, setMarcando] = useState(false)
   const i = actual ? m.lecciones.findIndex((l) => l.id === actual.id) : -1
   const leidas = m.lecciones.filter((l) => l.leida).length
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [actual?.id])
+
+  async function guardarReflexion(bloqueId, texto) {
+    const { data, error } = await supabase.rpc('guardar_reflexion', {
+      p_documento: documento, p_clave: clave, p_leccion: actual.id, p_bloque: bloqueId, p_texto: texto,
+    })
+    if (error) return 'No se pudo guardar. Revisa tu conexión e intenta de nuevo.'
+    if (data?.error) return data.error
+    alReflexion(m.id, actual.id, bloqueId, texto)
+    return null
+  }
 
   async function marcar() {
     setMarcando(true)
@@ -20,8 +31,7 @@ function Modulo({ m, documento, clave, volver, alLeer, irARepasos }) {
     setMarcando(false)
     if (data?.ok) {
       alLeer(m.id, actual.id)
-      setActual({ ...actual, leida: true })
-      if (i < m.lecciones.length - 1) setActual({ ...m.lecciones[i + 1] })
+      if (i < m.lecciones.length - 1) setActual(m.lecciones[i + 1])
     }
   }
 
@@ -51,8 +61,9 @@ function Modulo({ m, documento, clave, volver, alLeer, irARepasos }) {
               <p className="text-xs text-slate-500">Lección {i + 1} de {m.lecciones.length}</p>
               <h3 className="font-serif text-2xl font-semibold">{actual.titulo}</h3>
               {actual.resumen && <p className="mt-1 text-slate-600">{actual.resumen}</p>}
-              <Video url={actual.video_url} />
-              <TextoFormateado texto={actual.contenido} className="mt-4 text-[16px] text-slate-800" />
+              <div className="mt-6">
+                <BloquesVista key={actual.id} bloques={actual.bloques ?? []} reflexiones={actual.reflexiones ?? {}} onReflexion={guardarReflexion} />
+              </div>
               <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-5">
                 {i > 0 && <button className="btn-sec" onClick={() => setActual(m.lecciones[i - 1])}>Anterior</button>}
                 {actual.leida ? (
@@ -94,13 +105,15 @@ export default function PortalEstudio({ documento, clave, irARepasos }) {
     })
   }, [documento, clave])
 
+  const alReflexion = (mid, lid, bid, texto) => setModulos((ms) => ms.map((m) => (m.id !== mid ? m
+    : { ...m, lecciones: m.lecciones.map((l) => (l.id === lid ? { ...l, reflexiones: { ...(l.reflexiones ?? {}), [bid]: texto } } : l)) })))
   const alLeer = (mid, lid) => setModulos((ms) => ms.map((m) => (m.id !== mid ? m
     : { ...m, lecciones: m.lecciones.map((l) => (l.id === lid ? { ...l, leida: true } : l)) })))
 
   if (modulos === null) return <p className="text-slate-500">Cargando…</p>
   if (error) return <p className="text-sm text-alerta">{error}</p>
   const m = modulos.find((x) => x.id === abierto)
-  if (m) return <Modulo m={m} documento={documento} clave={clave} volver={() => setAbierto(null)} alLeer={alLeer} irARepasos={irARepasos} />
+  if (m) return <Modulo m={m} documento={documento} clave={clave} volver={() => setAbierto(null)} alLeer={alLeer} alReflexion={alReflexion} irARepasos={irARepasos} />
 
   const semestres = [...new Set(modulos.map((x) => x.semestre))].sort((a, b) => b - a)
   if (!semestres.length) {
