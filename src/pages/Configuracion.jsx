@@ -25,6 +25,7 @@ export default function Configuracion() {
   const [asig, setAsig] = useState({ formador_id: '', cohorte_id: '', semestre: '1' })
   const [error, setError] = useState('')
   const [registrados, setRegistrados] = useState([])
+  const [asigEdit, setAsigEdit] = useState(null) // { id, formador_id, cohorte_id, semestre }
   const [cohRegistro, setCohRegistro] = useState('')
   const [nombresReg, setNombresReg] = useState({})
   const [centros, setCentros] = useState([])
@@ -53,6 +54,16 @@ export default function Configuracion() {
     setRegistrados(fr.data ?? [])
   }
   useEffect(() => { cargar() }, [])
+
+  async function guardarAsignacion() {
+    const { id, formador_id, cohorte_id, semestre } = asigEdit
+    const repetida = asignaciones.some((a) => a.id !== id && a.formador_id === formador_id && String(a.cohorte_id) === String(cohorte_id) && a.semestre === Number(semestre))
+    if (repetida) { setError('Ese formador ya tiene asignada esa cohorte y ese semestre.'); return }
+    const ok = await ejecutar(supabase.from('asignaciones').update({ formador_id, cohorte_id: Number(cohorte_id), semestre: Number(semestre) }).eq('id', id))
+    if (!ok) return
+    setAsigEdit(null)
+    setAviso('Asignación modificada.')
+  }
 
   // Nombre del formador que aparece en planillas, itinerarios y PDF de una cohorte
   function elegirCohorteRegistro(id) {
@@ -144,7 +155,7 @@ export default function Configuracion() {
     cargar()
   }
 
-  const ejecutar = async (promesa) => { setError(''); const { error } = await promesa; if (error) setError(error.message); else cargar() }
+  const ejecutar = async (promesa) => { setError(''); const { error } = await promesa; if (error) { setError(error.message); return false } cargar(); return true }
 
   const conteos = {
     usuarios: perfiles.filter((p) => p.rol !== 'estudiante').length,
@@ -335,7 +346,11 @@ export default function Configuracion() {
 
       {seccion === 'asignaciones' && (<div>
         <h2 className="mb-1 text-xl font-semibold">Asignación de formadores</h2>
-        <p className="mb-3 text-sm text-slate-500">Cada formador solo puede digitar notas del semestre y la cohorte que tenga asignados.</p>
+        <p className="mb-3 text-sm text-slate-500">
+          Cada formador solo puede digitar notas del semestre y la cohorte que tenga asignados. Si cambia de semestre o de cohorte,
+          usa «Modificar». Las notas que ya digitó se conservan.
+        </p>
+        {aviso && !cohRegistro && <p className="mb-3 text-sm text-green-700">{aviso}</p>}
         <form className="mb-4 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); ejecutar(supabase.from('asignaciones').insert({ ...asig, semestre: Number(asig.semestre) })) }}>
           <select className="campo max-w-xs" required value={asig.formador_id} onChange={(e) => setAsig({ ...asig, formador_id: e.target.value })}>
             <option value="">Formador</option>
@@ -352,11 +367,38 @@ export default function Configuracion() {
         </form>
         <ul className="text-sm">
           {asignaciones.map((a) => (
-            <li key={a.id} className="flex items-center justify-between border-t border-slate-100 py-2">
-              <span>{a.perfiles?.nombre || <span className="text-amber-700">{a.perfiles?.correo} (sin nombre)</span>} · {a.cohortes?.nombre} · Semestre {a.semestre}</span>
-              <button className="text-xs text-alerta underline" onClick={() => ejecutar(supabase.from('asignaciones').delete().eq('id', a.id))}>Quitar</button>
+            <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 py-2">
+              {asigEdit?.id === a.id ? (
+                <>
+                  <div className="flex flex-1 flex-wrap gap-2">
+                    <select className="campo w-auto py-1" aria-label="Formador" value={asigEdit.formador_id} onChange={(e) => setAsigEdit({ ...asigEdit, formador_id: e.target.value })}>
+                      {perfiles.filter((p) => p.rol !== 'estudiante').map((p) => <option key={p.id} value={p.id}>{p.nombre || `${p.correo} (sin nombre)`}</option>)}
+                    </select>
+                    <select className="campo w-auto py-1" aria-label="Cohorte" value={asigEdit.cohorte_id} onChange={(e) => setAsigEdit({ ...asigEdit, cohorte_id: e.target.value })}>
+                      {cohortes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
+                    <select className="campo w-auto py-1" aria-label="Semestre" value={asigEdit.semestre} onChange={(e) => setAsigEdit({ ...asigEdit, semestre: e.target.value })}>
+                      {[1, 2, 3, 4].map((s) => <option key={s} value={s}>Semestre {s}</option>)}
+                    </select>
+                  </div>
+                  <span className="flex items-center gap-3">
+                    <button className="btn py-1" onClick={guardarAsignacion}>Guardar</button>
+                    <button className="text-sm text-slate-500 underline" onClick={() => setAsigEdit(null)}>Cancelar</button>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span>{a.perfiles?.nombre || <span className="text-amber-700">{a.perfiles?.correo} (sin nombre)</span>} · {a.cohortes?.nombre} · Semestre {a.semestre}</span>
+                  <span className="flex items-center gap-3">
+                    <button className="text-xs font-semibold text-mariano underline"
+                      onClick={() => { setError(''); setAviso(''); setAsigEdit({ id: a.id, formador_id: a.formador_id, cohorte_id: String(a.cohorte_id), semestre: String(a.semestre) }) }}>Modificar</button>
+                    <button className="text-xs text-alerta underline" onClick={() => ejecutar(supabase.from('asignaciones').delete().eq('id', a.id))}>Quitar</button>
+                  </span>
+                </>
+              )}
             </li>
           ))}
+          {!asignaciones.length && <li className="border-t border-slate-100 py-3 text-slate-500">Aún no hay asignaciones.</li>}
         </ul>
 
         <div className="mt-10 rounded-lg border border-slate-200 bg-white p-5">
