@@ -24,6 +24,9 @@ export default function Configuracion() {
   const [nueva, setNueva] = useState({ nombre: '', anio: new Date().getFullYear() })
   const [asig, setAsig] = useState({ formador_id: '', cohorte_id: '', semestre: '1' })
   const [error, setError] = useState('')
+  const [registrados, setRegistrados] = useState([])
+  const [cohRegistro, setCohRegistro] = useState('')
+  const [nombresReg, setNombresReg] = useState({})
   const [centros, setCentros] = useState([])
   const [nuevoCentro, setNuevoCentro] = useState('')
   const [centroEdit, setCentroEdit] = useState(null)
@@ -39,15 +42,34 @@ export default function Configuracion() {
   async function cargar() {
     const { data: s } = await supabase.auth.getSession()
     setYo(s.session?.user.id ?? null)
-    const [c, p, a, ce] = await Promise.all([
+    const [c, p, a, ce, fr] = await Promise.all([
       supabase.from('cohortes').select('*, estudiantes!estudiantes_cohorte_id_fkey(count)').order('anio', { ascending: false }),
       supabase.from('perfiles').select('*').order('nombre'),
       supabase.from('asignaciones').select('*, perfiles(nombre, correo), cohortes(nombre)').order('semestre'),
       supabase.from('centros').select('*, estudiantes!estudiantes_centro_id_fkey(count), cohortes!cohortes_centro_id_fkey(count), perfiles!perfiles_centro_id_fkey(count)').order('nombre'),
+      supabase.from('formadores_registrados').select('*'),
     ])
     setCohortes(c.data ?? []); setPerfiles(p.data ?? []); setAsignaciones(a.data ?? []); setCentros(ce.data ?? [])
+    setRegistrados(fr.data ?? [])
   }
   useEffect(() => { cargar() }, [])
+
+  // Nombre del formador que aparece en planillas, itinerarios y PDF de una cohorte
+  function elegirCohorteRegistro(id) {
+    setCohRegistro(id)
+    setNombresReg(Object.fromEntries([1, 2, 3, 4].map((s) => [s, registrados.find((r) => String(r.cohorte_id) === id && r.semestre === s)?.nombre ?? ''])))
+  }
+  async function guardarRegistro(semestre) {
+    const nombre = (nombresReg[semestre] ?? '').trim()
+    setError(''); setAviso('')
+    const r = nombre
+      ? await supabase.from('formadores_registrados').upsert({ cohorte_id: Number(cohRegistro), semestre, nombre }, { onConflict: 'cohorte_id,semestre' })
+      : await supabase.from('formadores_registrados').delete().eq('cohorte_id', Number(cohRegistro)).eq('semestre', semestre)
+    if (r.error) { setError(/formadores_registrados/.test(r.error.message) ? 'Falta instalar formadores_registrados.sql en Supabase.' : r.error.message); return }
+    setAviso(nombre ? `Semestre ${semestre}: ahora figura «${nombre}».` : `Semestre ${semestre}: se usará el docente asignado.`)
+    const { data } = await supabase.from('formadores_registrados').select('*')
+    setRegistrados(data ?? [])
+  }
 
   async function guardarCohorte() {
     if (!editando.nombre.trim()) { setError('La cohorte necesita un nombre.'); return }
@@ -336,6 +358,47 @@ export default function Configuracion() {
             </li>
           ))}
         </ul>
+
+        <div className="mt-10 rounded-lg border border-slate-200 bg-white p-5">
+          <h3 className="text-lg font-semibold">Formador que figura en los documentos</h3>
+          <p className="mb-4 mt-1 max-w-3xl text-sm text-slate-500">
+            Úsalo para semestres anteriores o para padres que no tienen cuenta en la plataforma. El nombre que escribas aquí aparece
+            en la planilla, el itinerario y el PDF, sin dar acceso a nadie. Si lo dejas vacío, figura el docente asignado.
+          </p>
+          <select className="campo mb-4 max-w-xs" value={cohRegistro} onChange={(e) => elegirCohorteRegistro(e.target.value)} aria-label="Cohorte">
+            <option value="">Elige la cohorte</option>
+            {cohortes.map((c) => <option key={c.id} value={c.id}>{c.nombre}{c.semestre_actual ? ` · en semestre ${c.semestre_actual}` : ''}</option>)}
+          </select>
+          {aviso && <p className="mb-3 text-sm text-green-700">{aviso}</p>}
+          {cohRegistro && (
+            <table className="w-full text-sm">
+              <thead className="bg-cielo text-left">
+                <tr><th className="p-2">Semestre</th><th className="p-2">Docente asignado</th><th className="p-2">Nombre que figura en los documentos</th><th className="p-2" /></tr>
+              </thead>
+              <tbody>
+                {[1, 2, 3, 4].map((s) => {
+                  const asignados = asignaciones.filter((a) => String(a.cohorte_id) === cohRegistro && a.semestre === s).map((a) => a.perfiles?.nombre || a.perfiles?.correo).join(', ')
+                  const guardado = registrados.find((r) => String(r.cohorte_id) === cohRegistro && r.semestre === s)?.nombre ?? ''
+                  const cambiado = (nombresReg[s] ?? '').trim() !== guardado
+                  return (
+                    <tr key={s} className="border-t border-slate-100">
+                      <td className="p-2 font-medium">Semestre {s}</td>
+                      <td className="p-2 text-slate-600">{asignados || <span className="text-slate-400">Nadie</span>}</td>
+                      <td className="p-2">
+                        <input className="campo py-1" placeholder={asignados ? `Usar: ${asignados}` : 'Ej. Pbro. Carlos Gómez'} value={nombresReg[s] ?? ''}
+                          onChange={(e) => setNombresReg({ ...nombresReg, [s]: e.target.value })}
+                          onKeyDown={(e) => e.key === 'Enter' && cambiado && guardarRegistro(s)} />
+                      </td>
+                      <td className="p-2 text-right">
+                        {cambiado && <button className="btn py-1" onClick={() => guardarRegistro(s)}>Guardar</button>}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>)}
       {seccion === 'centros' && (<div>
         <h2 className="mb-1 text-xl font-semibold">Centros de formación</h2>
