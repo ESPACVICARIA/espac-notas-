@@ -12,6 +12,7 @@ import Digitacion from './pages/Digitacion'
 import Configuracion from './pages/Configuracion'
 import Importar from './pages/Importar'
 import Imprimir from './pages/Imprimir'
+import ImprimirVarios from './pages/ImprimirVarios'
 import Modulos from './pages/Modulos'
 import Biblioteca from './pages/Biblioteca'
 import Mensajes from './pages/Mensajes'
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/estudiantes/nuevo" element={admin ? <EstudianteForm /> : <Navigate to="/" />} />
         <Route path="/estudiantes/:id" element={<Ficha perfil={perfil} />} />
         <Route path="/estudiantes/:id/imprimir" element={<Imprimir />} />
+        <Route path="/imprimir-varios" element={<ImprimirVarios />} />
         <Route path="/estudiantes/:id/editar" element={admin ? <EstudianteForm /> : <Navigate to="/" />} />
         <Route path="/notas" element={puedeCalificar ? <Digitacion perfil={perfil} /> : <Navigate to="/" />} />
         <Route path="/importar" element={admin ? <Importar /> : <Navigate to="/" />} />
