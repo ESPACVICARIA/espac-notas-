@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { guardarLote, MAX_LOTE } from './ImprimirVarios'
 import { supabase } from '../lib/supabase'
 import { exportarEstudiantes, traerTodo } from '../lib/exportar'
 import { ordenarEstudiantes, mostrarNombre } from '../lib/planilla'
@@ -76,6 +77,19 @@ export default function Estudiantes({ perfil }) {
   function alternarVarios(items) {
     const todos = items.length > 0 && items.every((e) => sel.has(e.id))
     setSel((s) => { const n = new Set(s); items.forEach((e) => (todos ? n.delete(e.id) : n.add(e.id))); return n })
+  }
+
+  const navigate = useNavigate()
+  function imprimir() {
+    const ids = sel.size ? [...sel] : filtrados.map((e) => e.id)
+    if (ids.length > MAX_LOTE) {
+      setAviso({ tipo: 'error', texto: `Puedes imprimir hasta ${MAX_LOTE} estudiantes a la vez. Selecciona menos o filtra por cohorte.` })
+      return
+    }
+    // Conserva el orden de la lista (apellidos o nombres)
+    const orden = filtrados.map((e) => e.id).filter((id) => ids.includes(id))
+    guardarLote(orden)
+    navigate('/imprimir-varios', { state: { ids: orden } })
   }
 
   async function exportar() {
@@ -218,6 +232,12 @@ export default function Estudiantes({ perfil }) {
             {exportando ? 'Preparando Excel…' : sel.size ? `Exportar ${sel.size} a Excel` : `Exportar ${filtrados.length} a Excel`}
           </button>
         )}
+        {filtrados.length > 0 && (
+          <button onClick={imprimir} className="btn-sec">
+            {sel.size ? `Imprimir o PDF de ${sel.size}` : `Imprimir o PDF de ${filtrados.length}`}
+          </button>
+        )}
+        {!admin && sel.size > 0 && <button onClick={() => setSel(new Set())} className="text-sm text-slate-500 underline">Quitar selección</button>}
         {admin && lista.some((e) => !e.centro_id) && (
           <button onClick={completarDesdeCohorte} disabled={asignando} className="btn-sec">
             Poner a cada estudiante el centro de su cohorte
@@ -285,7 +305,7 @@ export default function Estudiantes({ perfil }) {
                 <table className="w-full text-sm">
                   <thead className="bg-cielo text-left text-tinta">
                     <tr>
-                      {admin && (
+                      {(
                         <th className="w-10 p-3">
                           <input type="checkbox" aria-label={`Seleccionar todos${g.titulo ? ` de ${g.titulo}` : ''}`}
                             checked={todos} onChange={() => alternarVarios(g.items)} />
@@ -298,8 +318,8 @@ export default function Estudiantes({ perfil }) {
                   </thead>
                   <tbody>
                     {g.items.map((e) => (
-                      <tr key={e.id} className={`border-t border-slate-100 hover:bg-slate-50 ${sel.has(e.id) ? 'bg-red-50' : ''}`}>
-                        {admin && (
+                      <tr key={e.id} className={`border-t border-slate-100 hover:bg-slate-50 ${sel.has(e.id) ? 'bg-cielo' : ''}`}>
+                        {(
                           <td className="p-3">
                             <input type="checkbox" aria-label={`Seleccionar a ${e.nombre_completo}`} checked={sel.has(e.id)} onChange={() => alternar(e.id)} />
                           </td>
