@@ -48,6 +48,16 @@ function CambioClave({ documento, clave, alCambiar }) {
   )
 }
 
+// [clave, nombre en pantalla grande, nombre corto en el celular]
+const SECCIONES = [
+  ['notas', 'Mis notas', 'Mis notas'],
+  ['estudiar', 'Estudiar', 'Estudiar'],
+  ['repasos', 'Repasos', 'Repasos'],
+  ['mensajes', 'Mensajes', 'Mensajes'],
+  ['autoevaluaciones', 'Autoevaluaciones', 'Autoevaluar'],
+  ['documentos', 'Documentos', 'Material'],
+]
+
 export default function PortalEstudiante({ acceso, salir, alCambiarClave, alRecargar }) {
   const { datos, documento, clave } = acceso
   const [imprimiendo, setImprimiendo] = useState(false)
@@ -77,19 +87,19 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
   return (
     <div className="min-h-screen">
       <header className="border-b-4 border-tinta bg-white print:hidden">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 p-5">
-          <div className="flex items-center gap-4">
-            <Logos tamano="sm" />
-            <div>
-              <p className="font-serif text-lg font-semibold">Proceso de ESPAC Notas</p>
+        <div className="mx-auto flex max-w-5xl items-start justify-between gap-3 p-4 sm:items-center sm:p-5">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <Logos tamano="sm" className="!justify-start" />
+            <div className="min-w-0">
+              <p className="font-serif text-base font-semibold sm:text-lg">Proceso de ESPAC Notas</p>
               <p className="text-xs text-slate-500">Escuela Parroquial de Catequistas · Diócesis de Engativá</p>
             </div>
           </div>
-          <button onClick={salir} className="text-sm text-mariano underline hover:text-tinta">Salir</button>
+          <button onClick={salir} className="shrink-0 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-semibold text-mariano hover:bg-cielo">Salir</button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl p-5 md:p-10 print:max-w-none print:p-0">
+      <main className="mx-auto max-w-5xl px-4 py-5 sm:p-5 md:p-10 print:max-w-none print:p-0">
         {datos.debe_cambiar ? (
           <CambioClave documento={documento} clave={clave} alCambiar={alCambiarClave} />
         ) : imprimiendo ? (
@@ -104,8 +114,8 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
         ) : (
           <>
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-semibold">{est?.nombre_completo}</h1>
+              <div className="min-w-0">
+                <h1 className="text-2xl font-semibold sm:text-3xl">{est?.nombre_completo}</h1>
                 <p className="text-sm text-slate-500">{[est?.parroquia, est?.cohorte].filter(Boolean).join(' · ')}</p>
               </div>
               <div className="flex items-center gap-4">
@@ -116,12 +126,31 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
                 </div>
               </div>
             </div>
-            <div className="mb-6 flex gap-2 border-b border-slate-200">
-              {[['notas', 'Mis notas'], ['estudiar', 'Estudiar'], ['mensajes', `Mensajes${sinLeer ? ` (${sinLeer} nuevo${sinLeer > 1 ? 's' : ''})` : ''}`], ['repasos', 'Repasos'], ['autoevaluaciones', 'Autoevaluaciones'], ['documentos', `Documentos${datos.documentos?.length ? ` (${datos.documentos.length})` : ''}`]].map(([k, t]) => (
-                <button key={k} onClick={() => setSeccion(k)}
-                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${seccion === k ? 'border-mariano text-mariano' : 'border-transparent text-slate-500'}`}>{t}</button>
-              ))}
-            </div>
+            {/* Menú: cuadrícula en el celular, pestañas en pantalla grande */}
+            <nav aria-label="Secciones del portal" className="mb-6">
+              <div className="grid grid-cols-3 gap-2 sm:hidden">
+                {SECCIONES.map(([k, , corto]) => {
+                  const aviso = k === 'mensajes' ? sinLeer : 0
+                  return (
+                    <button key={k} onClick={() => setSeccion(k)} aria-current={seccion === k ? 'page' : undefined}
+                      className={`relative rounded-lg px-1 py-2.5 text-center text-[13px] font-semibold leading-tight ${seccion === k ? 'bg-mariano text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'}`}>
+                      {corto}
+                      {aviso > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-oro px-1 text-[11px] text-white" aria-label={`${aviso} sin leer`}>{aviso}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="hidden flex-wrap gap-x-1 border-b border-slate-200 sm:flex">
+                {SECCIONES.map(([k, largo]) => (
+                  <button key={k} onClick={() => setSeccion(k)} aria-current={seccion === k ? 'page' : undefined}
+                    className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${seccion === k ? 'border-mariano text-mariano' : 'border-transparent text-slate-500 hover:text-tinta'}`}>
+                    {largo}
+                    {k === 'mensajes' && sinLeer > 0 && <span className="ml-1 rounded-full bg-oro px-1.5 text-xs text-white">{sinLeer}</span>}
+                    {k === 'documentos' && datos.documentos?.length > 0 && <span className="ml-1 text-xs font-normal text-slate-400">({datos.documentos.length})</span>}
+                  </button>
+                ))}
+              </div>
+            </nav>
             {seccion === 'mensajes' ? (
               <PortalMensajes mensajes={mensajes} documento={documento} clave={clave}
                 alLeer={(id) => setMensajes((ms) => ms.map((m) => (m.id === id ? { ...m, leido: true } : m)))} />
