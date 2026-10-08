@@ -68,7 +68,7 @@ export function HojaMatricula({ est }) {
         </div>
       </div>
 
-      <div className="mt-6 space-y-4 rounded-3xl border-2 border-mariano p-6">
+      <div className="mt-6 space-y-3.5 rounded-3xl border-2 border-mariano p-6">
         <Linea etiqueta="Centro de formación" valor={est.centro_formacion} />
         <Linea etiqueta="Parroquia a la que pertenece" valor={est.parroquia} />
         <div className="grid grid-cols-3 gap-4">
@@ -99,7 +99,7 @@ export function HojaMatricula({ est }) {
         <Linea etiqueta="Estudio universitario o técnico" valor={est.estudio_superior} />
       </div>
 
-      <div className="mt-20 space-y-16">
+      <div className="mt-12 space-y-10 print:mt-10">
         <Linea etiqueta="Firma del catequista" valor="" />
         <Linea etiqueta="Firma del párroco" valor="" />
       </div>
