@@ -42,6 +42,7 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
   const [borrador, setBorrador] = useState({})
   const [sucio, setSucio] = useState(false)
   const [nueva, setNueva] = useState({ fecha: hoy(), tema: '' })
+  const [editSesion, setEditSesion] = useState(null) // { fecha, tema } mientras se modifica
   const [cargando, setCargando] = useState(true)
   const [trabajando, setTrabajando] = useState(false)
   const [mensaje, setMensaje] = useState(null)
@@ -91,7 +92,7 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
 
   function abrirSesion(s) {
     if (sucio && !confirm('Tienes cambios sin guardar en esta sesión. ¿Salir sin guardarlos?')) return
-    setActual(s); setBorrador(structuredClone(marcas[s.id] ?? {})); setSucio(false); setMensaje(null)
+    setActual(s); setBorrador(structuredClone(marcas[s.id] ?? {})); setSucio(false); setMensaje(null); setEditSesion(null)
   }
 
   async function crearSesion(e) {
@@ -103,6 +104,7 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
     setTrabajando(false)
     if (error) { setMensaje({ tipo: 'error', texto: error.message }); return }
     setNueva({ fecha: hoy(), tema: '' })
+    setEditSesion(null)
     await cargar(data.id)
   }
 
@@ -144,6 +146,20 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
       setMensaje({ tipo: 'error', texto: `No se pudo guardar: ${err.message}` })
     }
     setTrabajando(false)
+  }
+
+  async function guardarDatosSesion() {
+    if (!editSesion.fecha) { setMensaje({ tipo: 'error', texto: 'La sesión necesita una fecha.' }); return }
+    setTrabajando(true); setMensaje(null)
+    const { error } = await supabase.from('sesiones')
+      .update({ fecha: editSesion.fecha, tema: editSesion.tema.trim() || null }).eq('id', actual.id)
+    if (error) { setTrabajando(false); setMensaje({ tipo: 'error', texto: `No se pudo modificar: ${error.message}` }); return }
+    // Conserva lo que se esté marcando en la lista
+    const cambios = { fecha: editSesion.fecha, tema: editSesion.tema.trim() || null }
+    setSesiones((ss) => ss.map((x) => (x.id === actual.id ? { ...x, ...cambios } : x)).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.id - b.id))
+    setActual((a) => ({ ...a, ...cambios }))
+    setEditSesion(null); setTrabajando(false)
+    setMensaje({ tipo: 'ok', texto: 'Fecha y tema de la sesión actualizados.' })
   }
 
   async function eliminarSesion(s) {
@@ -244,10 +260,26 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
       {actual && (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 bg-tinta px-4 py-2 text-white">
-            <h3 className="font-serif text-base font-semibold">
-              {fechaLarga(actual.fecha)}{actual.tema ? ` · ${actual.tema}` : ''}
-            </h3>
+            {editSesion ? (
+              <div className="flex flex-1 flex-wrap items-center gap-2">
+                <input type="date" aria-label="Fecha de la sesión" className="campo w-auto py-1 text-tinta" value={editSesion.fecha}
+                  onChange={(e) => setEditSesion({ ...editSesion, fecha: e.target.value })} />
+                <input aria-label="Tema del encuentro" placeholder="Tema del encuentro (opcional)" maxLength={120}
+                  className="campo min-w-[12rem] flex-1 py-1 text-tinta" value={editSesion.tema} autoFocus
+                  onChange={(e) => setEditSesion({ ...editSesion, tema: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') guardarDatosSesion(); if (e.key === 'Escape') setEditSesion(null) }} />
+                <button className="rounded-md bg-white px-3 py-1 text-sm font-semibold text-tinta hover:bg-cielo" disabled={trabajando} onClick={guardarDatosSesion}>Guardar</button>
+                <button className="text-sm text-blue-100 underline hover:text-white" onClick={() => setEditSesion(null)}>Cancelar</button>
+              </div>
+            ) : (
+              <h3 className="font-serif text-base font-semibold">
+                {fechaLarga(actual.fecha)}{actual.tema ? ` · ${actual.tema}` : <span className="font-sans text-sm font-normal text-blue-200"> · Sin tema</span>}
+              </h3>
+            )}
             <div className="flex items-center gap-4 text-sm">
+              {!editSesion && (
+                <button className="text-blue-100 underline hover:text-white" onClick={() => setEditSesion({ fecha: actual.fecha, tema: actual.tema ?? '' })}>Modificar fecha o tema</button>
+              )}
               <button className="text-blue-100 underline hover:text-white" onClick={todosPresentes}>Marcar a los demás como A</button>
               <button className="text-red-200 underline hover:text-white" onClick={() => eliminarSesion(actual)}>Eliminar sesión</button>
             </div>
