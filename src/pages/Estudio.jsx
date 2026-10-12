@@ -4,6 +4,7 @@ import BloquesEditor from '../components/BloquesEditor'
 import BloquesVista from '../components/BloquesVista'
 import { LECCIONES_INTERACTIVAS, limpiarBloque, revisarBloque, nuevoId } from '../lib/bloques'
 import { mostrarNombre, ordenarEstudiantes } from '../lib/planilla'
+import CrearConIA from '../components/CrearConIA'
 
 const VACIA = { titulo: '', resumen: '', bloques: [], publicada: false }
 const desdeFila = (l) => ({ titulo: l.titulo, resumen: l.resumen ?? '', bloques: l.bloques ?? [], publicada: l.publicada })
@@ -23,6 +24,7 @@ export default function Estudio({ perfil }) {
   const [reflexiones, setReflexiones] = useState([])
   const [trabajando, setTrabajando] = useState(false)
   const [mensaje, setMensaje] = useState(null)
+  const [conIA, setConIA] = useState(false)
 
   useEffect(() => {
     supabase.from('espacios').select('*').order('semestre').order('orden').order('id').then(({ data }) => setEspacios((data ?? []).filter((e) => e.activo !== false)))
@@ -57,10 +59,10 @@ export default function Estudio({ perfil }) {
   useEffect(() => { if (vista === 'reflexiones' && typeof abierta === 'number') cargarReflexiones(abierta) }, [vista, abierta])
 
   const confirmarSalida = () => !sucio || confirm('Tienes cambios sin guardar. ¿Salir sin guardarlos?')
-  function abrir(l) { if (!confirmarSalida()) return; setAbierta(l.id); setForm(desdeFila(l)); setSucio(false); setVista('editar'); setMensaje(null) }
+  function abrir(l) { if (!confirmarSalida()) return; setConIA(false); setAbierta(l.id); setForm(desdeFila(l)); setSucio(false); setVista('editar'); setMensaje(null) }
   function nueva(modelo) {
     if (!confirmarSalida()) return
-    setAbierta('nueva')
+    setAbierta('nueva'); setConIA(false)
     setForm(modelo ? { ...VACIA, titulo: modelo.titulo, resumen: modelo.resumen, bloques: modelo.bloques.map((b) => ({ ...structuredClone(b), id: nuevoId() })) } : VACIA)
     setSucio(!!modelo); setVista('editar'); setMensaje(null)
   }
@@ -162,6 +164,9 @@ export default function Estudio({ perfil }) {
               </ol>
             </div>
             <button className="btn w-full" onClick={() => nueva(null)}>Nueva lección</button>
+            <button className="btn-sec w-full border-oro text-tinta" onClick={() => { if (confirmarSalida()) { setConIA(true); setSucio(false); setMensaje(null) } }}>
+              Crear con ayuda de IA
+            </button>
             {LECCIONES_INTERACTIVAS.map((m) => (
               <button key={m.clave} className="btn-sec w-full text-left" onClick={() => nueva(m)}>Usar lección de ejemplo: {m.titulo}</button>
             ))}
@@ -169,7 +174,12 @@ export default function Estudio({ perfil }) {
 
           <div className="min-w-0">
             {mensaje && <p className={`mb-3 text-sm ${mensaje.tipo === 'error' ? 'text-alerta' : 'text-green-700'}`}>{mensaje.texto}</p>}
-            {!abierta ? (
+            {conIA ? (
+              <CrearConIA cerrar={() => setConIA(false)} alImportar={({ leccion, repaso }) => {
+                nueva({ titulo: leccion.titulo, resumen: leccion.resumen, bloques: leccion.bloques })
+                setMensaje({ tipo: 'ok', texto: `Lección cargada como borrador desde la IA. Revísala y pulsa Guardar.${repaso?.preguntas.length ? ` El repaso (${repaso.preguntas.length} preguntas) quedó listo: créalo en Digitar notas > Repasos con «Usar el repaso de la IA».` : ''}` })
+              }} />
+            ) : !abierta ? (
               <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-slate-500">Elige una lección o crea una nueva.</p>
             ) : (
               <div className="rounded-lg border border-slate-200 bg-white">
