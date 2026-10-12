@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { fmt, NOTA_MINIMA } from '../lib/notas'
 import { mostrarNombre } from '../lib/planilla'
 import { BANCOS, TIPOS_PREGUNTA, conIds, preguntaVacia, revisarPregunta, limpiarPregunta } from '../lib/repasosModelo'
+import CrearConIA, { repasoPendiente, guardarRepasoPendiente } from './CrearConIA'
 
 const CRITERIOS = { mejor: 'El mejor intento', primero: 'El primer intento' }
 const falla = (r) => { if (r.error) throw r.error; return r }
@@ -101,6 +102,8 @@ export default function RepasoEditor({ cohorteId, espacio, estudiantes, orden, a
   const [trabajando, setTrabajando] = useState(false)
   const [mensaje, setMensaje] = useState(null)
   const [verResultados, setVerResultados] = useState(false)
+  const [conIA, setConIA] = useState(false)
+  const [pendiente, setPendiente] = useState(() => repasoPendiente())
 
   async function cargar(abrirId) {
     setCargando(true)
@@ -245,6 +248,12 @@ export default function RepasoEditor({ cohorteId, espacio, estudiantes, orden, a
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn-sec" disabled={trabajando} onClick={() => crear(null)}>Nuevo repaso en blanco</button>
+          <button className="btn-sec border-oro" disabled={trabajando} onClick={() => setConIA(!conIA)}>Crear con ayuda de IA</button>
+          {pendiente?.preguntas?.length > 0 && (
+            <button className="btn" disabled={trabajando} onClick={async () => { await crear(pendiente); guardarRepasoPendiente(null); setPendiente(null) }}>
+              Usar el repaso de la IA ({pendiente.preguntas.length} preguntas)
+            </button>
+          )}
           {BANCOS.map((b) => (
             <button key={b.clave} className="btn" disabled={trabajando} onClick={() => crear(b)}>
               Usar banco: {b.titulo.replace(/^Repaso:\s*/, '')} ({b.preguntas.length} preguntas)
@@ -252,6 +261,11 @@ export default function RepasoEditor({ cohorteId, espacio, estudiantes, orden, a
           ))}
         </div>
       </div>
+
+      {conIA && (
+        <CrearConIA modo="repaso" cerrar={() => setConIA(false)}
+          alImportar={async ({ repaso }) => { setConIA(false); await crear(repaso) }} />
+      )}
 
       {mensaje && <p className={`text-sm ${mensaje.tipo === 'error' ? 'text-alerta' : 'text-green-700'}`}>{mensaje.texto}</p>}
 
