@@ -7,6 +7,7 @@ import ImportarNotas from '../components/ImportarNotas'
 import AutoevaluacionEditor from '../components/AutoevaluacionEditor'
 import AsistenciaModulo from '../components/AsistenciaModulo'
 import RepasoEditor from '../components/RepasoEditor'
+import LeccionesNota from '../components/LeccionesNota'
 
 const aTexto = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','))
 
@@ -188,6 +189,7 @@ export default function Digitacion({ perfil }) {
               {pestana('planilla', 'Planilla')}
               {pestana('asistencia', `Asistencia por sesiones${asistenciaSesiones ? ' ✓' : ''}`)}
               {pestana('repasos', 'Repasos')}
+              {pestana('lecciones', 'Lecciones con nota')}
               {pestana('actividades', `Actividades de contenidos${numActividades ? ` (${numActividades})` : ''}`)}
               {pestana('autoevaluacion', `Autoevaluación en línea${autoEnLinea ? ' ✓' : ''}`)}
               {pestana('importar', 'Importar desde Excel')}
@@ -213,6 +215,8 @@ export default function Digitacion({ perfil }) {
             <p className="text-slate-500">Esta cohorte no tiene estudiantes activos.</p>
           ) : vista === 'repasos' ? (
             <RepasoEditor cohorteId={Number(sel.cohorte)} espacio={espacio} estudiantes={estudiantes} orden={orden} alCambiar={cargar} />
+          ) : vista === 'lecciones' ? (
+            <LeccionesNota cohorteId={Number(sel.cohorte)} espacio={espacio} estudiantes={estudiantes} orden={orden} alCambiar={cargar} />
           ) : vista === 'asistencia' ? (
             <AsistenciaModulo cohorteId={Number(sel.cohorte)} cohorteNombre={cohortes.find(([id]) => String(id) === sel.cohorte)?.[1]}
               espacio={espacio} estudiantes={estudiantes} orden={orden} perfil={perfil} alCambiar={cargar} />
