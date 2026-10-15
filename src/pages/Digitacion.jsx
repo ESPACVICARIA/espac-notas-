@@ -8,6 +8,7 @@ import AutoevaluacionEditor from '../components/AutoevaluacionEditor'
 import AsistenciaModulo from '../components/AsistenciaModulo'
 import RepasoEditor from '../components/RepasoEditor'
 import LeccionesNota from '../components/LeccionesNota'
+import ControlInasistencias from '../components/ControlInasistencias'
 
 const aTexto = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','))
 
@@ -79,7 +80,7 @@ export default function Digitacion({ perfil }) {
 
   function elegir(nuevo) {
     if (sucios.size && !confirm('Tienes notas sin guardar. ¿Salir sin guardarlas?')) return
-    setSel(nuevo); if (vista !== 'importar' || !nuevo.semestre) setVista('planilla')
+    setSel(nuevo); if (!['importar', 'control'].includes(vista) || !nuevo.semestre) setVista('planilla')
   }
   function cambiarVista(v) {
     if (v === vista) return
@@ -149,15 +150,15 @@ export default function Digitacion({ perfil }) {
 
   return (
     <section>
-      <h1 className="text-3xl font-semibold">Digitar notas</h1>
-      <p className="mb-6 text-sm text-slate-500">Escala de 0,0 a 5,0. Deja la casilla vacía si esa nota no aplica: no cuenta en el promedio.</p>
+      <h1 className="text-3xl font-semibold print:hidden">Digitar notas</h1>
+      <p className="mb-6 text-sm text-slate-500 print:hidden">Escala de 0,0 a 5,0. Deja la casilla vacía si esa nota no aplica: no cuenta en el promedio.</p>
 
       {opciones.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-slate-500">
           {admin ? 'Crea una cohorte en Configuración para empezar.' : 'Aún no tienes grupos asignados. La coordinación debe asignarte una cohorte y un semestre.'}
         </p>
       ) : (
-        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <div className="mb-6 grid gap-4 sm:grid-cols-3 print:hidden">
           <div>
             <label className="etiqueta" htmlFor="c">Cohorte</label>
             <select id="c" className="campo" value={sel.cohorte} onChange={(e) => elegir({ cohorte: e.target.value, semestre: '', espacio: '' })}>
@@ -184,10 +185,11 @@ export default function Digitacion({ perfil }) {
 
       {sel.semestre && (
         <>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 print:hidden">
             <div className="flex flex-wrap gap-2">
               {pestana('planilla', 'Planilla')}
               {pestana('asistencia', `Asistencia por sesiones${asistenciaSesiones ? ' ✓' : ''}`)}
+              {pestana('control', 'Control de inasistencias')}
               {pestana('repasos', 'Repasos')}
               {pestana('lecciones', 'Lecciones con nota')}
               {pestana('actividades', `Actividades de contenidos${numActividades ? ` (${numActividades})` : ''}`)}
@@ -207,6 +209,9 @@ export default function Digitacion({ perfil }) {
             <ImportarNotas cohorteId={Number(sel.cohorte)} cohorteNombre={cohortes.find(([id]) => String(id) === sel.cohorte)?.[1]}
               semestre={Number(sel.semestre)} espacios={espacios} espacioActual={espacio} perfil={perfil} orden={orden}
               alTerminar={cargar} />
+          ) : vista === 'control' ? (
+            <ControlInasistencias cohorteId={Number(sel.cohorte)} cohorteNombre={cohortes.find(([id]) => String(id) === sel.cohorte)?.[1]}
+              semestre={Number(sel.semestre)} espacios={espaciosSem} perfil={perfil} orden={orden} />
           ) : !espacio ? (
             <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-slate-500">
               Elige un módulo, retiro o seminario para ver su planilla, o usa "Importar desde Excel" para cargar todo el semestre.
