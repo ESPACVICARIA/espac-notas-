@@ -12,7 +12,8 @@ CRITERIOS
 - Sé fiel al contenido que te doy y a la doctrina de la Iglesia Católica. No inventes citas, números de párrafo del Catecismo ni referencias bíblicas: usa solo las que estén en el contenido o que sean exactas y conocidas.
 - Lenguaje sencillo, cálido y claro. Frases cortas. Explica cada término técnico la primera vez que aparece.
 - Organiza la lección en secciones con títulos. No pongas más de dos bloques de texto seguidos: intercala un bloque interactivo cada uno o dos bloques de texto.
-- La lección debe tener entre 10 y 20 bloques e incluir, si el tema lo permite: un recuadro destacado al inicio con la idea central, al menos un grupo de tarjetas con los términos clave, al menos un bloque "acordeon" o "pasos", entre 2 y 4 preguntas rápidas a lo largo de la lección y una reflexión personal al final, aplicada a la vida y al servicio del catequista.
+- La lección debe tener entre 12 y 22 bloques e incluir, si el tema lo permite: un recuadro destacado al inicio con la idea central, al menos un grupo de tarjetas con los términos clave, al menos un bloque "acordeon" o "pasos", entre 2 y 4 preguntas rápidas a lo largo de la lección, y una reflexión personal al final, aplicada a la vida y al servicio del catequista.
+- Incluye además entre 3 y 5 ACTIVIDADES de tipos distintos (unir, clasificar, completar, ordenar, linea, jerarquia, trivia, laberinto) donde encajen con el contenido: por ejemplo "linea" solo si hay hechos en orden histórico y "jerarquia" solo si hay un orden de importancia o de autoridad. Estas actividades y las preguntas rápidas dan la nota de la lección. Puedes cerrar con un "memorama" o una "ruleta" para repasar en grupo.
 - El repaso debe tener entre 10 y 15 preguntas que cubran todo el tema, mezclando los cuatro tipos. Cada pregunta lleva una explicación breve de la respuesta correcta.
 - No incluyas imágenes ni videos a menos que yo te dé el enlace exacto.
 
@@ -44,6 +45,18 @@ TIPOS DE BLOQUE PARA LA LECCIÓN (usa exactamente estos nombres de campo):
 - Pregunta rápida de verdadero o falso: {"tipo": "pregunta", "modo": "vf", "enunciado": "…", "correcta": true, "explicacion": "…"}
 - Reflexión personal: {"tipo": "reflexion", "pregunta": "…"}
 - Botón de enlace (solo si te doy el enlace): {"tipo": "boton", "texto": "…", "url": "https://…"}
+
+ACTIVIDADES PARA LA LECCIÓN (dan nota, salvo memorama y ruleta):
+- Unir columnas: {"tipo": "unir", "titulo": "Une cada … con …", "pares": [{"izq": "…", "der": "…"}]}  (de 3 a 8 parejas; los textos de "der" no se repiten)
+- Clasificar en grupos: {"tipo": "clasificar", "titulo": "…", "grupos": [{"nombre": "…", "elementos": ["…", "…"]}]}  (de 2 a 4 grupos, de 2 a 5 elementos cada uno)
+- Completar los espacios: {"tipo": "completar", "titulo": "…", "texto": "Dios es [[amor]] y nos llama a [[servir|servicio]].", "modo": "banco", "distractores": ["…", "…"]}  (entre [[ ]] va la palabra que falta; con | otras respuestas válidas; de 3 a 8 huecos; "modo" puede ser "banco" o "escribir")
+- Ordenar letras o palabras: {"tipo": "ordenar", "titulo": "…", "modo": "letras" | "palabras", "items": [{"respuesta": "Eucaristía", "pista": "Acción de gracias"}]}  (de 2 a 5; en "palabras" la respuesta es una oración corta)
+- Línea de tiempo: {"tipo": "linea", "titulo": "…", "items": [{"fecha": "…", "texto": "…"}]}  (de 4 a 8 hechos, escritos en el orden correcto)
+- Jerarquía: {"tipo": "jerarquia", "titulo": "…", "items": [{"texto": "…"}]}  (de 3 a 7 niveles, de lo más alto a lo más bajo)
+- Trivia con tiempo: {"tipo": "trivia", "titulo": "…", "segundos": 20, "preguntas": [{"enunciado": "…", "opciones": ["…", "…", "…"], "correcta": 0}]}  (de 4 a 8 preguntas)
+- Laberinto de respuestas: {"tipo": "laberinto", "titulo": "…", "enemigos": 1, "preguntas": [{"enunciado": "…", "opciones": ["…", "…", "…"], "correcta": 0}]}  (de 2 a 4 preguntas, máximo 4 opciones cada una)
+- Memorama: {"tipo": "memorama", "titulo": "…", "pares": [{"a": "término", "b": "significado corto"}]}  (de 4 a 8 parejas)
+- Ruleta: {"tipo": "ruleta", "titulo": "…", "items": ["tema o pregunta para compartir", "…"]}  (de 4 a 10)
 
 TIPOS DE PREGUNTA PARA EL REPASO:
 - Opción múltiple: {"tipo": "opcion", "enunciado": "…", "opciones": ["…", "…", "…", "…"], "correcta": 0, "explicacion": "…"}
@@ -104,6 +117,26 @@ function convertirBloque(b) {
     case 'boton': return { id, tipo, texto: txt(b.texto), url: txt(b.url) }
     case 'imagen':
     case 'video': return { id, tipo, url: txt(b.url), pie: txt(b.pie) }
+    case 'unir': return { id, tipo, titulo: txt(b.titulo), pares: items(b.pares, ['izq', 'der']) }
+    case 'memorama': return { id, tipo, titulo: txt(b.titulo), pares: items(b.pares, ['a', 'b']).slice(0, 8) }
+    case 'clasificar': return { id, tipo, titulo: txt(b.titulo), grupos: (Array.isArray(b.grupos) ? b.grupos : []).slice(0, 4)
+      .map((g) => ({ nombre: txt(g?.nombre), elementos: (Array.isArray(g?.elementos) ? g.elementos : []).map(txt).filter(Boolean) })) }
+    case 'completar': return { id, tipo, titulo: txt(b.titulo), texto: txt(b.texto), modo: txt(b.modo) === 'escribir' ? 'escribir' : 'banco',
+      distractores: Array.isArray(b.distractores) ? b.distractores.map(txt).filter(Boolean).join(', ') : txt(b.distractores) }
+    case 'ordenar': return { id, tipo, titulo: txt(b.titulo), modo: txt(b.modo) === 'palabras' ? 'palabras' : 'letras', items: items(b.items, ['respuesta', 'pista']) }
+    case 'linea': return { id, tipo, titulo: txt(b.titulo), items: items(b.items, ['fecha', 'texto']) }
+    case 'jerarquia': return { id, tipo, titulo: txt(b.titulo), items: (Array.isArray(b.items) ? b.items : []).map((x) => ({ texto: txt(x?.texto ?? x) })).filter((x) => x.texto) }
+    case 'ruleta': return { id, tipo, titulo: txt(b.titulo), items: (Array.isArray(b.items) ? b.items : []).map((x) => txt(x?.texto ?? x)).filter(Boolean).slice(0, 12), quitar: !!b.quitar }
+    case 'trivia':
+    case 'laberinto': {
+      const preguntas = (Array.isArray(b.preguntas) ? b.preguntas : []).map((q) => {
+        const opciones = (q?.opciones ?? []).map(txt).filter(Boolean).slice(0, tipo === 'laberinto' ? 4 : 6)
+        return { enunciado: txt(q?.enunciado), opciones, correcta: correctaOpcion(q?.correcta, opciones) }
+      })
+      return tipo === 'trivia'
+        ? { id, tipo, titulo: txt(b.titulo), segundos: Math.min(120, Math.max(5, Number(b.segundos) || 20)), preguntas }
+        : { id, tipo, titulo: txt(b.titulo), enemigos: Math.min(3, Math.max(0, Number(b.enemigos ?? 1) || 0)), preguntas }
+    }
     default: return null
   }
 }
