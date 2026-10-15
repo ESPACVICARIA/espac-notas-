@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
-import { reducirImagen } from '../lib/fotos'
-import { TIPOS_BLOQUE, ESTILOS_DESTACADO, bloqueNuevo, nombreTipo, revisarBloque } from '../lib/bloques'
+import { useState } from 'react'
+import SubirImagen from './SubirImagen'
+import EditorActividad from './ActividadesEditor'
+import { TIPOS_BLOQUE, GRUPOS_BLOQUE, ESTILOS_DESTACADO, bloqueNuevo, nombreTipo, revisarBloque, esCalificable } from '../lib/bloques'
 
 const AYUDA_TEXTO = '# Título · ## Subtítulo · **negrita** · *cursiva* · - viñeta · 1. lista · > cita · [texto](https://enlace)'
 
@@ -40,37 +40,10 @@ function Elementos({ items, campos, cambiar, nombre }) {
   )
 }
 
-function SubirImagen({ b, cambiar }) {
-  const entrada = useRef(null)
-  const [subiendo, setSubiendo] = useState(false)
-  const [error, setError] = useState('')
-  async function elegir(e) {
-    const archivo = e.target.files?.[0]
-    e.target.value = ''
-    if (!archivo) return
-    setSubiendo(true); setError('')
-    try {
-      const esGif = archivo.type === 'image/gif'
-      const contenido = esGif ? archivo : await reducirImagen(archivo, 1600)
-      const ruta = `lecciones/${crypto.randomUUID()}.${esGif ? 'gif' : 'jpg'}`
-      const { error: err } = await supabase.storage.from('estudio').upload(ruta, contenido, { contentType: esGif ? 'image/gif' : 'image/jpeg' })
-      if (err) throw err
-      cambiar({ ...b, url: supabase.storage.from('estudio').getPublicUrl(ruta).data.publicUrl })
-    } catch (err) {
-      setError(/bucket/i.test(err.message) ? 'Falta instalar la carpeta de imágenes (estudio_interactivo.sql).' : err.message)
-    }
-    setSubiendo(false)
-  }
+function ImagenConPie({ b, cambiar }) {
   return (
     <div className="space-y-2">
-      {b.url && <img src={b.url} alt="" className="max-h-48 rounded-lg border border-slate-200" />}
-      <div className="flex flex-wrap items-center gap-2">
-        <input ref={entrada} type="file" accept="image/*" className="sr-only" onChange={elegir} />
-        <button className="btn-sec py-1" disabled={subiendo} onClick={() => entrada.current?.click()}>{subiendo ? 'Subiendo…' : b.url ? 'Cambiar imagen' : 'Subir imagen'}</button>
-        <span className="text-xs text-slate-500">o pega el enlace de una imagen:</span>
-        <input className="campo min-w-[14rem] flex-1 py-1 text-sm" placeholder="https://…" value={b.url} onChange={(e) => cambiar({ ...b, url: e.target.value })} />
-      </div>
-      {error && <p className="text-xs text-alerta">{error}</p>}
+      <SubirImagen url={b.url} alCambiar={(url) => cambiar({ ...b, url })} />
       <Campo etiqueta="Descripción o pie de foto (opcional)">
         <input className="campo py-1" value={b.pie} onChange={(e) => cambiar({ ...b, pie: e.target.value })} />
       </Campo>
@@ -101,7 +74,7 @@ function EditorBloque({ b, cambiar }) {
           <textarea rows={3} className="campo" placeholder="Texto del recuadro" value={b.texto} onChange={(e) => set('texto', e.target.value)} />
         </div>
       )
-    case 'imagen': return <SubirImagen b={b} cambiar={cambiar} />
+    case 'imagen': return <ImagenConPie b={b} cambiar={cambiar} />
     case 'video':
       return (
         <div className="space-y-2">
@@ -172,7 +145,7 @@ function EditorBloque({ b, cambiar }) {
           <input className="campo py-1" placeholder="https://…" value={b.url} onChange={(e) => set('url', e.target.value)} />
         </div>
       )
-    default: return null
+    default: return <EditorActividad b={b} cambiar={cambiar} />
   }
 }
 
@@ -192,15 +165,20 @@ function Agregar({ alElegir, compacto }) {
         ¿Qué quieres agregar?
         <button className="text-xs font-normal text-slate-500 underline" onClick={() => setAbierto(false)}>Cancelar</button>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {TIPOS_BLOQUE.map((t) => (
-          <button key={t.tipo} onClick={() => { alElegir(bloqueNuevo(t.tipo)); setAbierto(false) }}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:border-mariano">
-            <span className="block text-sm font-semibold">{t.nombre}</span>
-            <span className="block text-xs text-slate-500">{t.ayuda}</span>
-          </button>
-        ))}
-      </div>
+      {GRUPOS_BLOQUE.map(([g, titulo]) => (
+        <div key={g} className="mb-3 last:mb-0">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">{titulo}</p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {TIPOS_BLOQUE.filter((t) => t.grupo === g).map((t) => (
+              <button key={t.tipo} onClick={() => { alElegir(bloqueNuevo(t.tipo)); setAbierto(false) }}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:border-mariano">
+                <span className="block text-sm font-semibold">{t.marca && <span aria-hidden="true">{t.marca} </span>}{t.nombre}</span>
+                <span className="block text-xs text-slate-500">{t.ayuda}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -226,6 +204,7 @@ export default function BloquesEditor({ bloques, cambiar }) {
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2">
                 <button onClick={() => plegar(b.id)} className="text-xs text-slate-400" aria-label={plegado ? 'Desplegar' : 'Plegar'}>{plegado ? '▸' : '▾'}</button>
                 <span className="text-xs font-semibold text-mariano">{i + 1}. {nombreTipo(b.tipo)}</span>
+                {esCalificable(b) && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-oro">da nota</span>}
                 {problema && <span className="text-xs text-amber-700">· {problema}</span>}
                 <span className="ml-auto flex items-center gap-2 text-xs">
                   <button className="px-1 text-mariano disabled:text-slate-300" disabled={i === 0} onClick={() => mover(i, -1)} aria-label="Subir bloque">▲</button>
