@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 import { traerTodo } from '../lib/exportar'
 import { fmt, truncar, NOTA_MINIMA } from '../lib/notas'
 import { mostrarNombre } from '../lib/planilla'
+import { contar, mapaRecuperaciones, ESTADOS_REC, vencida, enRojo } from '../lib/recuperaciones'
+import RecuperacionDialogo from './RecuperacionDialogo'
 
 export const ESTADOS = {
   A: { corto: 'A', largo: 'Asistió', color: 'bg-green-600 text-white border-green-600' },
@@ -20,18 +22,19 @@ const hoy = () => new Date().toLocaleDateString('en-CA')
 const fechaLarga = (f) => new Date(`${f}T12:00:00`).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 const fechaCorta = (f) => new Date(`${f}T12:00:00`).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
 
-// Nota de asistencia a partir de los conteos, según cómo se traten las faltas justificadas
-export function notaAsistencia({ A, FI, FJ }, regla) {
-  const total = regla === 'excluir' ? A + FI : A + FI + FJ
+// Nota de asistencia a partir de los conteos, según cómo se traten las faltas justificadas.
+// R = faltas con recuperación aprobada: cuentan como asistencia.
+export function notaAsistencia({ A, FI, FJ, R = 0 }, regla) {
+  const total = (regla === 'excluir' ? A + FI : A + FI + FJ) + R
   if (!total) return null
-  const presentes = regla === 'asiste' ? A + FJ : A
+  const presentes = (regla === 'asiste' ? A + FJ : A) + R
   return truncar((presentes / total) * 5)
 }
 
-export function porcentajeAsistencia({ A, FI, FJ }, regla) {
-  const total = regla === 'excluir' ? A + FI : A + FI + FJ
+export function porcentajeAsistencia({ A, FI, FJ, R = 0 }, regla) {
+  const total = (regla === 'excluir' ? A + FI : A + FI + FJ) + R
   if (!total) return null
-  return Math.floor((((regla === 'asiste' ? A + FJ : A) / total) * 100) + 1e-9)
+  return Math.floor(((((regla === 'asiste' ? A + FJ : A) + R) / total) * 100) + 1e-9)
 }
 
 export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, estudiantes, orden, perfil, alCambiar }) {
@@ -46,6 +49,8 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
   const [cargando, setCargando] = useState(true)
   const [trabajando, setTrabajando] = useState(false)
   const [mensaje, setMensaje] = useState(null)
+  const [recs, setRecs] = useState({}) // recuperaciones por falla
+  const [dialogo, setDialogo] = useState(null) // { estudiante, sesion, falla }
 
   async function cargar(abrir) {
     setCargando(true)
@@ -56,6 +61,9 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
     const lista = ss ?? []
     const ids = lista.map((s) => s.id)
     const filas = ids.length ? await traerTodo(() => supabase.from('asistencias').select('*').in('sesion_id', ids).order('sesion_id')) : []
+    const { data: rs } = await supabase.from('recuperaciones').select('*').eq('cohorte_id', cohorteId).eq('espacio_id', espacio.id)
+    const rmap = mapaRecuperaciones(rs ?? [])
+    setRecs(rmap)
     const m = {}
     for (const f of filas) (m[f.sesion_id] ??= {})[f.estudiante_id] = { estado: f.estado, comentario: f.comentario ?? '' }
     setSesiones(lista); setMarcas(m)
@@ -63,7 +71,7 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
     const s = abrir ? lista.find((x) => x.id === abrir) : null
     setActual(s ?? null); setBorrador(s ? structuredClone(m[s.id] ?? {}) : {}); setSucio(false)
     setCargando(false)
-    return { lista, m, cf }
+    return { lista, m, cf, rmap }
   }
   useEffect(() => { setMensaje(null); cargar() }, [cohorteId, espacio.id])
 
@@ -71,19 +79,14 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
   const conteos = useMemo(() => {
     const vista = actual ? { ...marcas, [actual.id]: borrador } : marcas
     const r = {}
-    for (const e of estudiantes) {
-      const c = { A: 0, FI: 0, FJ: 0 }
-      for (const s of sesiones) { const x = vista[s.id]?.[e.id]; if (x?.estado) c[x.estado]++ }
-      r[e.id] = c
-    }
+    for (const e of estudiantes) r[e.id] = contar(sesiones, vista, e.id, recs)
     return r
-  }, [marcas, borrador, actual, sesiones, estudiantes])
+  }, [marcas, borrador, actual, sesiones, estudiantes, recs])
 
-  async function convalidar(m = marcas, regla = config.justificadas) {
+  async function convalidar(m = marcas, regla = config.justificadas, rr = recs) {
     const ahora = new Date().toISOString()
     const filas = estudiantes.map((e) => {
-      const c = { A: 0, FI: 0, FJ: 0 }
-      for (const s of sesiones) { const x = m[s.id]?.[e.id]; if (x?.estado) c[x.estado]++ }
+      const c = contar(sesiones, m, e.id, rr)
       return { estudiante_id: e.id, espacio_id: espacio.id, asistencia: notaAsistencia(c, regla), actualizado_por: perfil.id, actualizado: ahora }
     })
     const { error } = await supabase.from('notas').upsert(filas, { onConflict: 'estudiante_id,espacio_id' })
@@ -167,8 +170,8 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
     setTrabajando(true)
     const { error } = await supabase.from('sesiones').delete().eq('id', s.id)
     if (error) setMensaje({ tipo: 'error', texto: error.message })
-    const { m } = await cargar()
-    if (!error && config.convalidar) { try { await convalidar(m); alCambiar?.() } catch (e) { setMensaje({ tipo: 'error', texto: e.message }) } }
+    const { m, rmap } = await cargar()
+    if (!error && config.convalidar) { try { await convalidar(m, config.justificadas, rmap); alCambiar?.() } catch (e) { setMensaje({ tipo: 'error', texto: e.message }) } }
     setTrabajando(false)
   }
 
@@ -199,13 +202,14 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
         Semestre: espacio.semestre, Módulo: `${espacio.etiqueta} · ${espacio.nombre}`, Estudiante: mostrarNombre(e, orden),
         Documento: e.numero_id ?? '', Fecha: s.fecha, Tema: s.tema ?? '', Estado: x?.estado ?? '', Detalle: x ? ESTADOS[x.estado].largo : 'Sin marcar',
         Comentario: x?.comentario ?? '',
+        Recuperación: x && x.estado !== 'A' && recs[`s${s.id}:${e.id}`] ? `${recs[`s${s.id}:${e.id}`].forma} (${ESTADOS_REC[recs[`s${s.id}:${e.id}`].estado].nombre})` : '',
       })
     }
     const resumen = estudiantes.map((e) => {
       const c = conteos[e.id]
       const n = notaAsistencia(c, config.justificadas)
       return { Semestre: espacio.semestre, Módulo: `${espacio.etiqueta} · ${espacio.nombre}`, Estudiante: mostrarNombre(e, orden), Documento: e.numero_id ?? '',
-        A: c.A, FI: c.FI, FJ: c.FJ, 'Sesiones registradas': c.A + c.FI + c.FJ, 'Nota de asistencia': n ?? '' }
+        A: c.A, FI: c.FI, FJ: c.FJ, Recuperadas: c.R, 'Sesiones registradas': c.A + c.FI + c.FJ + c.R, 'Nota de asistencia': n ?? '' }
     })
     const libro = XLSX.utils.book_new()
     const hoja = (filas, nombre) => {
@@ -284,9 +288,9 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
               <button className="text-red-200 underline hover:text-white" onClick={() => eliminarSesion(actual)}>Eliminar sesión</button>
             </div>
           </div>
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-cielo text-left">
-              <tr><th className="p-2">Estudiante</th><th className="p-2">Asistencia</th><th className="p-2">Comentario</th></tr>
+              <tr><th className="p-2">Estudiante</th><th className="p-2">Asistencia</th><th className="p-2">Comentario</th><th className="p-2">Recuperación</th></tr>
             </thead>
             <tbody>
               {estudiantes.map((e) => {
@@ -308,6 +312,19 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
                     <td className="p-2">
                       <input className="campo py-1" maxLength={300} placeholder={x?.estado === 'FJ' ? 'Motivo de la falla' : ''}
                         aria-label={`Comentario para ${e.nombre_completo}`} value={x?.comentario ?? ''} onChange={(ev) => comentar(e.id, ev.target.value)} />
+                    </td>
+                    <td className="p-2">
+                      {(() => {
+                        const guardada = marcas[actual.id]?.[e.id]?.estado
+                        if (!guardada || guardada === 'A') return x?.estado && x.estado !== 'A' ? <span className="text-xs text-slate-400">Guarda primero</span> : null
+                        const rec = recs[`s${actual.id}:${e.id}`]
+                        return (
+                          <button type="button" onClick={() => setDialogo({ estudiante: e, sesion: actual, falla: guardada })}
+                            className={`whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${rec ? ESTADOS_REC[rec.estado].clase : 'border-alerta text-alerta hover:bg-red-50'}`}>
+                            {rec ? ESTADOS_REC[rec.estado].nombre : 'Asignar'}
+                          </button>
+                        )
+                      })()}
                     </td>
                   </tr>
                 )
@@ -338,14 +355,14 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
               Convalidar como nota de Asistencia en la planilla
             </label>
             <p className="text-xs text-slate-500">
-              Nota = porcentaje de asistencia × 5, truncada a un decimal. Por ejemplo, 9 de 10 sesiones = 4,5. Mientras esté convalidada,
-              la columna Asistencia de la planilla se llena sola y queda bloqueada.
+              Nota = porcentaje de asistencia × 5, truncada a un decimal. Por ejemplo, 9 de 10 sesiones = 4,5. Una falla con recuperación
+              <strong> aprobada</strong> cuenta como asistencia. Mientras esté convalidada, la columna Asistencia de la planilla se llena sola y queda bloqueada.
             </p>
           </div>
           <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-cielo">
               <tr>
-                <th className="p-2 text-left">Estudiante</th><th className="p-2">A</th><th className="p-2">FI</th><th className="p-2">FJ</th>
+                <th className="p-2 text-left">Estudiante</th><th className="p-2">A</th><th className="p-2">FI</th><th className="p-2">FJ</th><th className="p-2" title="Faltas con recuperación aprobada">Recup.</th>
                 <th className="p-2">% asistencia</th><th className="p-2">Nota</th>
               </tr>
             </thead>
@@ -360,6 +377,7 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
                     <td className="p-2 text-center tabular-nums">{c.A}</td>
                     <td className={`p-2 text-center tabular-nums ${c.FI ? 'text-alerta' : ''}`}>{c.FI}</td>
                     <td className="p-2 text-center tabular-nums">{c.FJ}</td>
+                    <td className={`p-2 text-center tabular-nums ${c.R ? 'font-semibold text-green-700' : ''}`}>{c.R}</td>
                     <td className="p-2 text-center tabular-nums">{pct === null ? '—' : `${pct}%`}</td>
                     <td className={`p-2 text-center font-semibold tabular-nums ${n !== null && n < NOTA_MINIMA ? 'text-alerta' : ''}`}>{fmt(n)}</td>
                   </tr>
@@ -368,6 +386,64 @@ export default function AsistenciaModulo({ cohorteId, cohorteNombre, espacio, es
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Faltas y recuperaciones del módulo */}
+      {sesiones.length > 0 && (() => {
+        const fallas = []
+        for (const s of sesiones) for (const e of estudiantes) {
+          const x = marcas[s.id]?.[e.id]
+          if (x?.estado === 'FI' || x?.estado === 'FJ') fallas.push({ s, e, x, rec: recs[`s${s.id}:${e.id}`] })
+        }
+        if (!fallas.length) return null
+        const pendientes = fallas.filter((f) => f.rec?.estado !== 'aprobada').length
+        return (
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 p-4">
+              <h3 className="text-lg font-semibold">Faltas y recuperaciones</h3>
+              <p className="text-sm text-slate-600">
+                {fallas.length} falla(s) en este módulo · <span className={pendientes ? 'font-semibold text-alerta' : 'text-green-700'}>{pendientes} sin recuperar</span>.
+                Asigna una forma alternativa y marca su avance. El control de todo el semestre está en la pestaña «Control de inasistencias».
+              </p>
+            </div>
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="bg-cielo text-left">
+                <tr><th className="p-2">Estudiante</th><th className="p-2">Sesión</th><th className="p-2">Falla</th><th className="p-2">Recuperación</th><th className="p-2">Estado</th></tr>
+              </thead>
+              <tbody>
+                {fallas.map(({ s, e, x, rec }) => (
+                  <tr key={`${s.id}-${e.id}`} className={`border-t border-slate-100 ${enRojo(x.estado, rec) ? 'bg-red-50' : ''}`}>
+                    <td className={`p-2 font-medium ${enRojo(x.estado, rec) ? 'text-alerta' : ''}`}>{mostrarNombre(e, orden)}</td>
+                    <td className="p-2">{fechaCorta(s.fecha)}{s.tema ? <span className="text-slate-500"> · {s.tema}</span> : ''}</td>
+                    <td className="p-2"><span className={`rounded px-1.5 py-0.5 text-xs font-semibold text-white ${x.estado === 'FI' ? 'bg-alerta' : 'bg-oro'}`}>{x.estado}</span></td>
+                    <td className="p-2">
+                      {rec ? <>{rec.forma}{rec.fecha_limite && <span className={`block text-xs ${vencida(rec) ? 'font-semibold text-alerta' : 'text-slate-500'}`}>Hasta el {fechaCorta(rec.fecha_limite)}{vencida(rec) ? ' · vencida' : ''}</span>}</> : <span className="text-slate-400">Sin asignar</span>}
+                    </td>
+                    <td className="p-2">
+                      <button type="button" onClick={() => setDialogo({ estudiante: e, sesion: s, falla: x.estado })}
+                        className={`whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${rec ? ESTADOS_REC[rec.estado].clase : x.estado === 'FI' ? 'border-alerta text-alerta hover:bg-white' : 'border-oro text-tinta hover:bg-amber-50'}`}>
+                        {rec ? `${ESTADOS_REC[rec.estado].nombre}${rec.nota !== null ? ` · ${fmt(rec.nota)}` : ''}` : 'Asignar'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      })()}
+
+      {dialogo && (
+        <RecuperacionDialogo cohorteId={cohorteId} espacio={espacio} estudiante={dialogo.estudiante} sesion={dialogo.sesion} falla={dialogo.falla}
+          recuperacion={recs[`s${dialogo.sesion.id}:${dialogo.estudiante.id}`]} perfil={perfil} cerrar={() => setDialogo(null)}
+          alGuardar={async () => {
+            // Solo recarga las recuperaciones, para no perder lo que se esté marcando en la lista
+            const { data: rs } = await supabase.from('recuperaciones').select('*').eq('cohorte_id', cohorteId).eq('espacio_id', espacio.id)
+            const rmap = mapaRecuperaciones(rs ?? [])
+            setRecs(rmap)
+            if (config.convalidar) { await convalidar(marcas, config.justificadas, rmap); alCambiar?.() }
+            setMensaje({ tipo: 'ok', texto: `Recuperación guardada.${config.convalidar ? ' La nota de Asistencia se actualizó.' : ''}` })
+          }} />
       )}
     </div>
   )
