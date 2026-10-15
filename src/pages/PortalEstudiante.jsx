@@ -7,6 +7,7 @@ import { HojaItinerario, BarraImpresion } from '../components/Documentos'
 import ListaDocumentos from '../components/ListaDocumentos'
 import PortalAutoevaluaciones from '../components/PortalAutoevaluaciones'
 import PortalMensajes from '../components/PortalMensajes'
+import PortalRecuperaciones from '../components/PortalRecuperaciones'
 import PortalRepasos from '../components/PortalRepasos'
 import PortalEstudio from '../components/PortalEstudio'
 import CampoClave from '../components/CampoClave'
@@ -165,6 +166,7 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
                 vacio="Todavía no hay documentos para tus semestres. Tus formadores los publicarán aquí." />
             ) : (
             <>
+            <PortalRecuperaciones documento={documento} clave={clave} />
             {!permitido ? (
               <p className="mb-4 inline-block rounded-full bg-cielo px-4 py-1 text-sm font-semibold text-mariano">Semestre {actual} en curso</p>
             ) : (
