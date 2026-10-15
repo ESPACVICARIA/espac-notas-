@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import BloquesEditor from '../components/BloquesEditor'
 import BloquesVista from '../components/BloquesVista'
-import { LECCIONES_INTERACTIVAS, limpiarBloque, revisarBloque, nuevoId } from '../lib/bloques'
+import { LECCIONES_INTERACTIVAS, limpiarBloque, revisarBloque, nuevoId, esCalificable, notaLeccion } from '../lib/bloques'
 import { mostrarNombre, ordenarEstudiantes } from '../lib/planilla'
 import CrearConIA from '../components/CrearConIA'
 
@@ -25,6 +25,8 @@ export default function Estudio({ perfil }) {
   const [trabajando, setTrabajando] = useState(false)
   const [mensaje, setMensaje] = useState(null)
   const [conIA, setConIA] = useState(false)
+  const [prueba, setPrueba] = useState({})
+  const [rondaPrueba, setRondaPrueba] = useState(0)
 
   useEffect(() => {
     supabase.from('espacios').select('*').order('semestre').order('orden').order('id').then(({ data }) => setEspacios((data ?? []).filter((e) => e.activo !== false)))
@@ -222,7 +224,22 @@ export default function Estudio({ perfil }) {
                     <p className="text-xs text-slate-500">{espacio.etiqueta} · {espacio.nombre}</p>
                     <h2 className="font-serif text-3xl font-semibold">{form.titulo || 'Sin título'}</h2>
                     {form.resumen && <p className="mt-1 text-slate-600">{form.resumen}</p>}
-                    <div className="mt-6"><BloquesVista bloques={form.bloques} /></div>
+                    <div className="mt-6">
+                      <BloquesVista key={rondaPrueba} bloques={form.bloques} onResultado={(id, p) => setPrueba((r) => (id in r ? r : { ...r, [id]: p }))} />
+                    </div>
+                    {form.bloques.some(esCalificable) && (
+                      <div className="mt-8 rounded-xl border-2 border-oro/50 bg-amber-50/50 p-4 text-sm">
+                        <p className="font-semibold">
+                          Prueba: {form.bloques.filter((b) => esCalificable(b) && prueba[b.id] !== undefined).length} de {form.bloques.filter(esCalificable).length} actividades hechas
+                          · nota {String(notaLeccion(form.bloques, prueba)?.toFixed(1) ?? '—').replace('.', ',')}
+                          <button className="ml-3 font-normal underline" onClick={() => { setPrueba({}); setRondaPrueba((n) => n + 1) }}>Reiniciar</button>
+                        </p>
+                        <p className="mt-1 text-slate-600">
+                          El estudiante verá aquí el botón «Entregar mis actividades». La nota es el promedio del primer intento de cada actividad × 5.
+                          Para que cuente en la planilla, actívala por cohorte en <strong>Digitar notas &gt; Lecciones con nota</strong>.
+                        </p>
+                      </div>
+                    )}
                   </article>
                 )}
 
