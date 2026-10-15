@@ -3,18 +3,68 @@
 let n = 0
 export const nuevoId = () => `b${Date.now().toString(36)}${(++n).toString(36)}`
 
-export const TIPOS_BLOQUE = [
-  { tipo: 'texto', nombre: 'Texto', ayuda: 'Párrafos, títulos y listas' },
-  { tipo: 'destacado', nombre: 'Recuadro destacado', ayuda: 'Idea clave, cita bíblica u oración' },
-  { tipo: 'imagen', nombre: 'Imagen', ayuda: 'Foto o gráfico con descripción' },
-  { tipo: 'video', nombre: 'Video', ayuda: 'YouTube u otro enlace' },
-  { tipo: 'tarjetas', nombre: 'Tarjetas que giran', ayuda: 'Término por delante, significado por detrás' },
-  { tipo: 'acordeon', nombre: 'Toca para descubrir', ayuda: 'Secciones que se abren al tocarlas' },
-  { tipo: 'pasos', nombre: 'Paso a paso', ayuda: 'Se revela un paso a la vez' },
-  { tipo: 'pregunta', nombre: 'Pregunta rápida', ayuda: 'Con respuesta y explicación al instante' },
-  { tipo: 'reflexion', nombre: 'Reflexión personal', ayuda: 'El estudiante escribe y la guarda' },
-  { tipo: 'boton', nombre: 'Botón de enlace', ayuda: 'Lleva a una página o documento' },
+export const GRUPOS_BLOQUE = [
+  ['contenido', 'Contenido'],
+  ['actividad', 'Actividades con nota'],
+  ['juego', 'Para jugar y repasar'],
 ]
+
+export const TIPOS_BLOQUE = [
+  { tipo: 'texto', grupo: 'contenido', nombre: 'Texto', ayuda: 'Párrafos, títulos y listas' },
+  { tipo: 'destacado', grupo: 'contenido', nombre: 'Recuadro destacado', ayuda: 'Idea clave, cita bíblica u oración' },
+  { tipo: 'imagen', grupo: 'contenido', nombre: 'Imagen', ayuda: 'Foto o gráfico con descripción' },
+  { tipo: 'video', grupo: 'contenido', nombre: 'Video', ayuda: 'YouTube u otro enlace' },
+  { tipo: 'tarjetas', grupo: 'contenido', nombre: 'Tarjetas que giran', ayuda: 'Término por delante, significado por detrás' },
+  { tipo: 'acordeon', grupo: 'contenido', nombre: 'Toca para descubrir', ayuda: 'Secciones que se abren al tocarlas' },
+  { tipo: 'pasos', grupo: 'contenido', nombre: 'Paso a paso', ayuda: 'Se revela un paso a la vez' },
+  { tipo: 'reflexion', grupo: 'contenido', nombre: 'Reflexión personal', ayuda: 'El estudiante escribe y la guarda' },
+  { tipo: 'boton', grupo: 'contenido', nombre: 'Botón de enlace', ayuda: 'Lleva a una página o documento' },
+  { tipo: 'pregunta', grupo: 'actividad', marca: '❓', nombre: 'Pregunta rápida', ayuda: 'Opción múltiple o verdadero/falso, con explicación' },
+  { tipo: 'unir', grupo: 'actividad', marca: '🔗', nombre: 'Unir columnas', ayuda: 'Toca un elemento de cada columna o arrastra uno sobre su pareja' },
+  { tipo: 'clasificar', grupo: 'actividad', marca: '🗂️', nombre: 'Clasificar en grupos', ayuda: 'Lleva cada elemento a su caja; avisa si se equivoca' },
+  { tipo: 'completar', grupo: 'actividad', marca: '✏️', nombre: 'Completar los espacios', ayuda: 'Dios es [[amor]]: con banco de palabras o escribiendo' },
+  { tipo: 'ordenar', grupo: 'actividad', marca: '🔀', nombre: 'Ordenar letras o palabras', ayuda: 'Anagrama de una palabra o de una oración' },
+  { tipo: 'linea', grupo: 'actividad', marca: '⏳', nombre: 'Línea de tiempo', ayuda: 'Ordena los hechos del primero al último' },
+  { tipo: 'jerarquia', grupo: 'actividad', marca: '🔺', nombre: 'Jerarquía', ayuda: 'Ordena de lo más alto a lo más bajo' },
+  { tipo: 'diagrama', grupo: 'actividad', marca: '📍', nombre: 'Diagrama etiquetado', ayuda: 'Sube una imagen y marca dónde va cada parte' },
+  { tipo: 'trivia', grupo: 'actividad', marca: '⏱️', nombre: 'Trivia con tiempo', ayuda: 'De 50 a 100 puntos por pregunta según la rapidez' },
+  { tipo: 'laberinto', grupo: 'actividad', marca: '👾', nombre: 'Laberinto de respuestas', ayuda: 'Llega a la letra correcta esquivando enemigos' },
+  { tipo: 'memorama', grupo: 'juego', marca: '🧠', nombre: 'Memorama', ayuda: 'Encuentra las parejas; no da nota' },
+  { tipo: 'ruleta', grupo: 'juego', marca: '🎡', nombre: 'Ruleta', ayuda: 'Gira y sale un tema o una pregunta; no da nota' },
+]
+
+// Bloques que dan nota (deben coincidir con tipos_calificables() en lecciones_nota.sql)
+export const CALIFICABLES = new Set(TIPOS_BLOQUE.filter((t) => t.grupo === 'actividad').map((t) => t.tipo))
+export const esCalificable = (b) => CALIFICABLES.has(b?.tipo)
+
+// Nota de 0 a 5 truncada a un decimal; los bloques sin respuesta cuentan 0
+export function notaLeccion(bloques, resultados) {
+  const cal = bloques.filter(esCalificable)
+  if (!cal.length) return null
+  const suma = cal.reduce((s, b) => s + Math.max(0, Math.min(1, Number(resultados[b.id] ?? 0))), 0)
+  return Math.trunc(Math.round((suma / cal.length) * 5 * 1000) / 100) / 10
+}
+
+// «Dios es [[amor]] y nos llama a [[servir|servicio]]» → partes de texto y huecos
+export function partirHuecos(texto = '') {
+  const partes = []
+  const re = /\[\[([^\]]+)\]\]/g
+  let ultimo = 0, m, k = 0
+  while ((m = re.exec(texto))) {
+    if (m.index > ultimo) partes.push({ texto: texto.slice(ultimo, m.index) })
+    const aceptadas = m[1].split('|').map((x) => x.trim()).filter(Boolean)
+    if (aceptadas.length) partes.push({ hueco: k++, aceptadas })
+    ultimo = re.lastIndex
+  }
+  if (ultimo < texto.length) partes.push({ texto: texto.slice(ultimo) })
+  return partes
+}
+
+// Para comparar respuestas escritas sin tildes, mayúsculas ni signos
+export const normalizar = (t) => String(t ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ]/g, '')
+
+const preguntaJuego = () => ({ enunciado: '', opciones: ['', '', ''], correcta: 0 })
+
 export const nombreTipo = (t) => TIPOS_BLOQUE.find((x) => x.tipo === t)?.nombre ?? t
 
 export const ESTILOS_DESTACADO = {
@@ -37,6 +87,17 @@ export function bloqueNuevo(tipo) {
     case 'pregunta': return { id, tipo, modo: 'opcion', enunciado: '', opciones: ['', '', ''], correcta: 0, explicacion: '' }
     case 'reflexion': return { id, tipo, pregunta: '' }
     case 'boton': return { id, tipo, texto: '', url: '' }
+    case 'unir': return { id, tipo, titulo: '', pares: [{ izq: '', der: '' }, { izq: '', der: '' }, { izq: '', der: '' }] }
+    case 'clasificar': return { id, tipo, titulo: '', grupos: [{ nombre: '', elementos: [] }, { nombre: '', elementos: [] }] }
+    case 'memorama': return { id, tipo, titulo: '', pares: [{ a: '', b: '' }, { a: '', b: '' }, { a: '', b: '' }] }
+    case 'diagrama': return { id, tipo, titulo: '', url: '', puntos: [] }
+    case 'completar': return { id, tipo, titulo: '', texto: '', modo: 'banco', distractores: '' }
+    case 'ordenar': return { id, tipo, titulo: '', modo: 'letras', items: [{ respuesta: '', pista: '' }] }
+    case 'linea': return { id, tipo, titulo: '', items: [{ fecha: '', texto: '' }, { fecha: '', texto: '' }, { fecha: '', texto: '' }] }
+    case 'jerarquia': return { id, tipo, titulo: '', items: [{ texto: '' }, { texto: '' }, { texto: '' }] }
+    case 'trivia': return { id, tipo, titulo: '', segundos: 20, preguntas: [preguntaJuego(), preguntaJuego()] }
+    case 'ruleta': return { id, tipo, titulo: '', items: ['', '', '', ''], quitar: false }
+    case 'laberinto': return { id, tipo, titulo: '', enemigos: 1, preguntas: [preguntaJuego()] }
     default: return { id, tipo: 'texto', texto: '' }
   }
 }
@@ -59,19 +120,56 @@ export function revisarBloque(b) {
       return null
     case 'reflexion': return vacio(b.pregunta) ? 'falta la pregunta de reflexión' : null
     case 'boton': return vacio(b.texto) || !/^https?:\/\//i.test(b.url ?? '') ? 'necesita texto y un enlace que empiece por https://' : null
+    case 'unir': {
+      const p = (b.pares ?? []).filter((x) => !vacio(x.izq) && !vacio(x.der))
+      if (p.length < 2) return 'necesita al menos dos parejas completas'
+      if (new Set(p.map((x) => x.der.trim())).size < p.length) return 'los textos de la columna derecha no se pueden repetir'
+      return null
+    }
+    case 'clasificar': {
+      const g = (b.grupos ?? []).filter((x) => !vacio(x.nombre) && x.elementos?.some((e) => !vacio(e)))
+      return g.length < 2 ? 'necesita al menos dos grupos con nombre y elementos' : null
+    }
+    case 'memorama': return (b.pares ?? []).filter((x) => !vacio(x.a) && !vacio(x.b)).length < 2 ? 'necesita al menos dos parejas' : null
+    case 'diagrama':
+      if (vacio(b.url)) return 'falta la imagen'
+      return (b.puntos ?? []).filter((x) => !vacio(x.nombre)).length < 2 ? 'marca al menos dos puntos con su nombre' : null
+    case 'completar': return !partirHuecos(b.texto).some((x) => x.aceptadas) ? 'marca al menos un hueco con [[palabra]]' : null
+    case 'ordenar': return !(b.items ?? []).some((x) => !vacio(x.respuesta)) ? 'escribe al menos una palabra u oración' : null
+    case 'linea':
+    case 'jerarquia': return (b.items ?? []).filter((x) => !vacio(x.texto)).length < 3 ? 'necesita al menos tres elementos' : null
+    case 'trivia':
+    case 'laberinto': {
+      const ps = (b.preguntas ?? []).filter((q) => !vacio(q.enunciado))
+      if (!ps.length) return 'necesita al menos una pregunta'
+      const mala = ps.findIndex((q) => q.opciones.filter((o) => !vacio(o)).length < 2 || vacio(q.opciones[q.correcta]))
+      return mala >= 0 ? `la pregunta ${mala + 1} necesita dos opciones y la correcta marcada` : null
+    }
+    case 'ruleta': return (b.items ?? []).filter((x) => !vacio(x)).length < 2 ? 'necesita al menos dos opciones' : null
     default: return null
   }
 }
 
 // Quita elementos vacíos antes de guardar
+const limpiarPreguntaJuego = (q) => {
+  const correcta = q.opciones[q.correcta]
+  const opciones = q.opciones.map((o) => String(o).trim()).filter(Boolean)
+  return { ...q, enunciado: q.enunciado.trim(), opciones, correcta: Math.max(0, opciones.indexOf(String(correcta ?? '').trim())) }
+}
+
 export function limpiarBloque(b) {
   const x = structuredClone(b)
-  if (x.items) x.items = x.items.filter((i) => Object.values(i).some((v) => !vacio(v)))
+  if (x.items && x.tipo === 'ruleta') x.items = x.items.map((i) => String(i).trim()).filter(Boolean)
+  else if (x.items) x.items = x.items.filter((i) => Object.values(i).some((v) => !vacio(v)))
   if (x.tipo === 'pregunta' && x.modo === 'opcion') {
     const correcta = x.opciones[x.correcta]
     x.opciones = x.opciones.map((o) => o.trim()).filter(Boolean)
     x.correcta = Math.max(0, x.opciones.indexOf(String(correcta).trim()))
   }
+  if (x.pares) x.pares = x.pares.filter((p) => Object.values(p).every((v) => !vacio(v))).map((p) => Object.fromEntries(Object.entries(p).map(([k, v]) => [k, v.trim()])))
+  if (x.grupos) x.grupos = x.grupos.map((g) => ({ nombre: g.nombre.trim(), elementos: g.elementos.map((e) => e.trim()).filter(Boolean) })).filter((g) => g.nombre && g.elementos.length)
+  if (x.puntos) x.puntos = x.puntos.filter((p) => !vacio(p.nombre)).map((p) => ({ ...p, nombre: p.nombre.trim() }))
+  if (x.preguntas) x.preguntas = x.preguntas.filter((q) => !vacio(q.enunciado)).map(limpiarPreguntaJuego)
   return x
 }
 
