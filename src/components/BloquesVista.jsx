@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import TextoFormateado from './TextoFormateado'
 import Video from './Video'
 import { ESTILOS_DESTACADO } from '../lib/bloques'
+import { Unir, Clasificar, Memorama, Diagrama, Completar, Ordenar, Secuencia, Trivia, Ruleta, Laberinto } from './ActividadesVista'
 
 function Destacado({ b }) {
   const e = ESTILOS_DESTACADO[b.estilo] ?? ESTILOS_DESTACADO.idea
@@ -121,8 +122,9 @@ function Pasos({ b }) {
   )
 }
 
-function Pregunta({ b }) {
+function Pregunta({ b, alResultado }) {
   const [elegida, setElegida] = useState(null)
+  const respondida = useRef(false)
   const opciones = b.modo === 'vf' ? ['Verdadero', 'Falso'] : b.opciones.filter(Boolean)
   const correcta = b.modo === 'vf' ? (b.correcta ? 'Verdadero' : 'Falso') : b.opciones[b.correcta]
   const acierto = elegida === correcta
@@ -137,7 +139,8 @@ function Pregunta({ b }) {
             : o === correcta ? 'border-green-600 bg-green-50 text-green-900'
             : esta ? 'border-alerta bg-red-50 text-red-900' : 'border-slate-200 bg-white opacity-60'
           return (
-            <button key={o} type="button" disabled={elegida !== null} onClick={() => setElegida(o)}
+            <button key={o} type="button" disabled={elegida !== null}
+              onClick={() => { setElegida(o); if (!respondida.current) { respondida.current = true; alResultado?.(o === correcta ? 1 : 0) } }}
               className={`rounded-lg border-2 px-4 py-3 text-left font-medium transition ${color} ${b.modo === 'vf' ? 'text-center' : ''}`}>
               {elegida !== null && o === correcta && <span aria-hidden="true">✓ </span>}
               {esta && o !== correcta && <span aria-hidden="true">✗ </span>}
@@ -190,7 +193,9 @@ function Reflexion({ b, inicial = '', onGuardar }) {
 }
 
 // Muestra los bloques de una lección. onReflexion(bloqueId, texto) devuelve un mensaje de error o null.
-export default function BloquesVista({ bloques = [], reflexiones = {}, onReflexion }) {
+// onResultado(bloqueId, puntos de 0 a 1) se llama una vez por actividad, con el resultado del primer intento.
+export default function BloquesVista({ bloques = [], reflexiones = {}, onReflexion, onResultado }) {
+  const res = (b) => (p) => onResultado?.(b.id, p)
   return (
     <div className="space-y-7 text-[16px] text-slate-800">
       {bloques.map((b) => {
@@ -202,7 +207,18 @@ export default function BloquesVista({ bloques = [], reflexiones = {}, onReflexi
           case 'tarjetas': return <Tarjetas key={b.id} b={b} />
           case 'acordeon': return <Acordeon key={b.id} b={b} />
           case 'pasos': return <Pasos key={b.id} b={b} />
-          case 'pregunta': return <Pregunta key={b.id} b={b} />
+          case 'pregunta': return <Pregunta key={b.id} b={b} alResultado={res(b)} />
+          case 'unir': return <Unir key={b.id} b={b} alResultado={res(b)} />
+          case 'clasificar': return <Clasificar key={b.id} b={b} alResultado={res(b)} />
+          case 'memorama': return <Memorama key={b.id} b={b} />
+          case 'diagrama': return b.url ? <Diagrama key={b.id} b={b} alResultado={res(b)} /> : null
+          case 'completar': return <Completar key={b.id} b={b} alResultado={res(b)} />
+          case 'ordenar': return <Ordenar key={b.id} b={b} alResultado={res(b)} />
+          case 'linea':
+          case 'jerarquia': return <Secuencia key={b.id} b={b} alResultado={res(b)} />
+          case 'trivia': return <Trivia key={b.id} b={b} alResultado={res(b)} />
+          case 'ruleta': return <Ruleta key={b.id} b={b} />
+          case 'laberinto': return <Laberinto key={b.id} b={b} alResultado={res(b)} />
           case 'reflexion': return <Reflexion key={b.id} b={b} inicial={reflexiones[b.id] ?? ''} onGuardar={onReflexion} />
           case 'boton': return (
             <div key={b.id} className="text-center">
