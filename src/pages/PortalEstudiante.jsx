@@ -92,7 +92,7 @@ export default function PortalEstudiante({ acceso, salir, alCambiarClave, alReca
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <Logos tamano="sm" className="!justify-start" />
             <div className="min-w-0">
-              <p className="font-serif text-base font-semibold sm:text-lg">Proceso de ESPAC Notas</p>
+              <p className="font-serif text-base font-semibold sm:text-lg">Gestión de ESPAC</p>
               <p className="text-xs text-slate-500">Escuela Parroquial de Catequistas · Diócesis de Engativá</p>
             </div>
           </div>
