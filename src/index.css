@@ -5,7 +5,7 @@
   --color-mariano: #2F55A4;
   --color-cielo: #E8EEF8;
   --color-oro: #B8892B;
-  --color-papel: #FBFBFD;
+  --color-papel: #F6F7FA;
   --color-alerta: #B3261E;
   --font-sans: "Figtree", system-ui, sans-serif;
   --font-serif: "Source Serif 4", Georgia, serif;
@@ -13,15 +13,51 @@
 
 @layer base {
   body { background: var(--color-papel); color: var(--color-tinta); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
-  h1, h2, h3 { font-family: var(--font-serif); }
+  h1, h2, h3 { font-family: var(--font-serif); letter-spacing: -0.01em; }
+  input[type="checkbox"], input[type="radio"] { accent-color: var(--color-mariano); width: 1rem; height: 1rem; }
+  ::selection { background: color-mix(in srgb, var(--color-mariano) 18%, transparent); }
 }
 
 @layer components {
-  .campo { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mariano; }
-  .etiqueta { @apply mb-1 block text-sm font-medium text-slate-700; }
-  .btn { @apply inline-flex items-center justify-center rounded-md bg-mariano px-4 py-2 text-sm font-semibold text-white hover:bg-tinta disabled:opacity-50; }
-  .btn-sec { @apply inline-flex items-center justify-center rounded-md border border-mariano px-4 py-2 text-sm font-semibold text-mariano hover:bg-cielo; }
-  .nota { @apply w-16 rounded border border-slate-300 bg-white px-2 py-1 text-center text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-mariano; }
+  /* Campos de texto y listas desplegables */
+  .campo {
+    @apply w-full rounded-lg border border-slate-300/90 bg-white px-3.5 py-2.5 text-sm text-tinta shadow-[0_1px_2px_rgba(16,24,40,0.05)]
+      transition-[border-color,box-shadow] duration-150 placeholder:text-slate-400
+      hover:border-slate-400 focus:border-mariano focus:outline-none focus:ring-4 focus:ring-mariano/15
+      disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400 disabled:shadow-none;
+  }
+  select.campo {
+    @apply cursor-pointer appearance-none bg-no-repeat pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2364748b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.75rem center;
+    background-size: 1.1rem;
+  }
+  select.campo:disabled { @apply cursor-not-allowed; }
+  .etiqueta { @apply mb-1.5 block text-[13px] font-semibold text-slate-600; }
+
+  /* Botones */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-mariano px-4 py-2.5 text-sm font-semibold text-white shadow-sm
+      transition-colors duration-150 hover:bg-tinta focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mariano/25
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-sec {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-tinta shadow-sm
+      transition-colors duration-150 hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mariano/15
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* Casilla de nota en las planillas */
+  .nota {
+    @apply w-16 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-center text-sm tabular-nums transition-[border-color,box-shadow]
+      hover:border-slate-400 focus:border-mariano focus:outline-none focus:ring-4 focus:ring-mariano/15;
+  }
+
+  /* Piezas comunes para dar el mismo aspecto a todas las páginas */
+  .tarjeta { @apply rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]; }
+  .antetitulo { @apply text-xs font-semibold uppercase tracking-[0.14em] text-oro; }
+  .titulo-pagina { @apply font-serif text-[1.75rem] font-semibold leading-tight text-tinta sm:text-3xl; }
+  .subtitulo-pagina { @apply mt-1.5 max-w-3xl text-sm leading-relaxed text-slate-500; }
 }
 
 /* Impresión y PDF: tamaño carta, colores fieles */
