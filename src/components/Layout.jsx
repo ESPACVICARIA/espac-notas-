@@ -159,7 +159,7 @@ export default function Layout({ perfil, children }) {
         <Menu perfil={perfil} />
       </aside>
 
-      <main className="mx-auto w-full max-w-6xl p-5 md:p-10 print:max-w-none print:p-0">{children}</main>
+      <main className="mx-auto w-full min-w-0 max-w-6xl p-5 md:p-10 print:max-w-none print:p-0">{children}</main>
     </div>
   )
 }
