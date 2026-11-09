@@ -12,6 +12,22 @@ import ControlInasistencias from '../components/ControlInasistencias'
 
 const aTexto = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','))
 
+// Paso numerado del selector: se marca en dorado cuando ya está elegido
+function Paso({ n, listo, activo, id, titulo, ayuda, children }) {
+  return (
+    <div className={`relative p-4 sm:p-5 ${activo ? '' : 'opacity-70'}`}>
+      <div className="mb-2 flex items-center gap-2.5">
+        <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${listo ? 'bg-oro text-white' : activo ? 'bg-tinta text-white' : 'bg-slate-200 text-slate-500'}`}>
+          {listo ? <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="m5 10 3.5 3.5L15 7" /></svg> : n}
+        </span>
+        <label htmlFor={id} className="text-[13px] font-semibold text-slate-700">{titulo}</label>
+      </div>
+      {children}
+      <p className="mt-1.5 min-h-[1rem] text-xs text-slate-400">{ayuda}</p>
+    </div>
+  )
+}
+
 export default function Digitacion({ perfil }) {
   const admin = perfil?.rol === 'admin'
   const [opciones, setOpciones] = useState([])
@@ -143,62 +159,84 @@ export default function Digitacion({ perfil }) {
     else { setSucios(new Set()); setMensaje({ tipo: 'ok', texto: `Notas guardadas para ${filas.length} estudiante(s).` }) }
   }
 
-  const pestana = (v, t) => (
-    <button onClick={() => cambiarVista(v)}
-      className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${vista === v ? 'border-mariano text-mariano' : 'border-transparent text-slate-500'}`}>{t}</button>
+  const pestana = (v, t, marca) => (
+    <button onClick={() => cambiarVista(v)} aria-pressed={vista === v}
+      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors ${
+        vista === v ? 'bg-white text-tinta shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:bg-white/60 hover:text-tinta'}`}>
+      {t}
+      {marca && <span className={`rounded-full px-1.5 py-px text-[11px] font-bold ${vista === v ? 'bg-cielo text-mariano' : 'bg-slate-200/70 text-slate-600'}`}>{marca}</span>}
+    </button>
   )
+
 
   return (
     <section>
-      <h1 className="text-3xl font-semibold print:hidden">Digitar notas</h1>
-      <p className="mb-6 text-sm text-slate-500 print:hidden">Escala de 0,0 a 5,0. Deja la casilla vacía si esa nota no aplica: no cuenta en el promedio.</p>
+      <header className="mb-6 print:hidden">
+        <p className="antetitulo">Seguimiento académico</p>
+        <h1 className="titulo-pagina mt-1">Digitar notas</h1>
+        <p className="subtitulo-pagina">Escala de 0,0 a 5,0. Deja la casilla vacía si esa nota no aplica: no cuenta en el promedio.</p>
+      </header>
 
       {opciones.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-slate-500">
+        <div className="tarjeta px-6 py-10 text-center text-slate-500">
           {admin ? 'Crea una cohorte en Configuración para empezar.' : 'Aún no tienes grupos asignados. La coordinación debe asignarte una cohorte y un semestre.'}
-        </p>
+        </div>
       ) : (
-        <div className="mb-6 grid gap-4 sm:grid-cols-3 print:hidden">
-          <div>
-            <label className="etiqueta" htmlFor="c">Cohorte</label>
+        <div className="tarjeta mb-6 grid divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0 print:hidden">
+          <Paso n={1} id="c" titulo="Cohorte" activo listo={!!sel.cohorte}
+            ayuda={sel.cohorte ? `${semestres.length} semestre(s) disponibles` : 'Empieza por aquí'}>
             <select id="c" className="campo" value={sel.cohorte} onChange={(e) => elegir({ cohorte: e.target.value, semestre: '', espacio: '' })}>
-              <option value="">Selecciona</option>
+              <option value="">Elige la cohorte…</option>
               {cohortes.map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
             </select>
-          </div>
-          <div>
-            <label className="etiqueta" htmlFor="s">Semestre</label>
+          </Paso>
+          <Paso n={2} id="s" titulo="Semestre" activo={!!sel.cohorte} listo={!!sel.semestre}
+            ayuda={!sel.cohorte ? 'Primero elige la cohorte' : sel.semestre ? `${espaciosSem.length} módulos, retiros y seminarios` : ''}>
             <select id="s" className="campo" disabled={!sel.cohorte} value={sel.semestre} onChange={(e) => elegir({ ...sel, semestre: e.target.value, espacio: '' })}>
-              <option value="">Selecciona</option>
+              <option value="">Elige el semestre…</option>
               {semestres.map((s) => <option key={s} value={s}>Semestre {s}</option>)}
             </select>
-          </div>
-          <div>
-            <label className="etiqueta" htmlFor="e">Módulo, retiro o seminario</label>
+          </Paso>
+          <Paso n={3} id="e" titulo="Módulo, retiro o seminario" activo={!!sel.semestre} listo={!!sel.espacio}
+            ayuda={!sel.semestre ? 'Primero elige el semestre' : sel.espacio ? (espacio?.tipo === 'retiro' ? 'Retiro' : espacio?.tipo === 'seminario' ? 'Seminario' : 'Módulo') : 'Para ver su planilla'}>
             <select id="e" className="campo" disabled={!sel.semestre} value={sel.espacio} onChange={(e) => elegir({ ...sel, espacio: e.target.value })}>
-              <option value="">Selecciona</option>
+              <option value="">Elige el módulo…</option>
               {espaciosSem.map((e) => <option key={e.id} value={e.id}>{e.etiqueta} · {e.nombre}</option>)}
             </select>
-          </div>
+          </Paso>
+        </div>
+      )}
+
+      {opciones.length > 0 && !sel.semestre && (
+        <div className="tarjeta flex flex-col items-center px-6 py-12 text-center print:hidden">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-cielo text-mariano" aria-hidden="true">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 13h6M9 17h4" />
+            </svg>
+          </span>
+          <p className="mt-4 font-semibold text-tinta">Elige la cohorte y el semestre</p>
+          <p className="mt-1 max-w-md text-sm text-slate-500">Después escoge el módulo, retiro o seminario para ver la planilla, la asistencia, los repasos y las demás herramientas.</p>
         </div>
       )}
 
       {sel.semestre && (
         <>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 print:hidden">
-            <div className="flex flex-wrap gap-2">
-              {pestana('planilla', 'Planilla')}
-              {pestana('asistencia', `Asistencia por sesiones${asistenciaSesiones ? ' ✓' : ''}`)}
-              {pestana('control', 'Control de inasistencias')}
-              {pestana('repasos', 'Repasos')}
-              {pestana('lecciones', 'Lecciones con nota')}
-              {pestana('actividades', `Actividades de contenidos${numActividades ? ` (${numActividades})` : ''}`)}
-              {pestana('autoevaluacion', `Autoevaluación en línea${autoEnLinea ? ' ✓' : ''}`)}
-              {pestana('importar', 'Importar desde Excel')}
-            </div>
-            <label className="mb-2 flex items-center gap-2 text-sm">
+          <div className="mb-5 flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between print:hidden">
+            <nav aria-label="Herramientas del grupo" className="-mx-1 min-w-0 overflow-x-auto px-1 pb-1">
+              <div className="flex w-max gap-1 rounded-xl bg-slate-200/60 p-1">
+                {pestana('planilla', 'Planilla')}
+                {pestana('asistencia', 'Asistencia', asistenciaSesiones ? '✓' : null)}
+                {pestana('control', 'Inasistencias')}
+                {pestana('repasos', 'Repasos')}
+                {pestana('lecciones', 'Lecciones')}
+                {pestana('actividades', 'Actividades', numActividades || null)}
+                {pestana('autoevaluacion', 'Autoevaluación', autoEnLinea ? '✓' : null)}
+                {pestana('importar', 'Importar Excel')}
+              </div>
+            </nav>
+            <label className="flex shrink-0 items-center gap-2 text-sm text-slate-600">
               Ordenar por
-              <select className="campo w-auto py-1" value={orden} onChange={(e) => setOrden(e.target.value)}>
+              <select className="campo w-auto py-1.5" value={orden} onChange={(e) => setOrden(e.target.value)}>
                 <option value="apellidos">Apellidos</option>
                 <option value="nombres">Nombres</option>
               </select>
@@ -213,9 +251,10 @@ export default function Digitacion({ perfil }) {
             <ControlInasistencias cohorteId={Number(sel.cohorte)} cohorteNombre={cohortes.find(([id]) => String(id) === sel.cohorte)?.[1]}
               semestre={Number(sel.semestre)} espacios={espaciosSem} perfil={perfil} orden={orden} />
           ) : !espacio ? (
-            <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-slate-500">
-              Elige un módulo, retiro o seminario para ver su planilla, o usa "Importar desde Excel" para cargar todo el semestre.
-            </p>
+            <div className="tarjeta px-6 py-10 text-center">
+              <p className="font-semibold text-tinta">Elige un módulo, retiro o seminario</p>
+              <p className="mt-1 text-sm text-slate-500">Para ver su planilla. También puedes usar «Importar Excel» para cargar todo el semestre de una vez.</p>
+            </div>
           ) : estudiantes.length === 0 ? (
             <p className="text-slate-500">Esta cohorte no tiene estudiantes activos.</p>
           ) : vista === 'repasos' ? (
