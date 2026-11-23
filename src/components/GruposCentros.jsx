@@ -29,10 +29,9 @@ function Contenido({ g, col, organizar }) {
         <IconoGrupo />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate pr-4 font-serif text-lg font-semibold leading-tight text-tinta">{g.nombre}</span>
-        <span className="mt-0.5 block text-xs text-slate-500">
-          {[g.anio && `Año ${g.anio}`, g.semestre_actual && `Semestre ${g.semestre_actual} en curso`].filter(Boolean).join(' · ') || 'Estudiantes sin grupo asignado'}
-        </span>
+        {g.etiqueta && <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{g.etiqueta}</span>}
+        <span className="block truncate pr-4 font-serif text-lg font-semibold leading-tight text-tinta">{g.corto ?? g.nombre}</span>
+        <span className="mt-0.5 block text-xs text-slate-500">{g.detalle}</span>
         <span className="mt-3 flex flex-wrap gap-1.5 text-xs">
           <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-tinta">{g.activos} activo(s)</span>
           {g.total > g.activos && <span className="rounded-full bg-slate-50 px-2.5 py-1 text-slate-500">{g.total - g.activos} inactivo(s)</span>}
@@ -45,15 +44,17 @@ function Contenido({ g, col, organizar }) {
   )
 }
 
-// Tarjetas de grupos (cohortes) organizadas por centro.
+// Tarjetas de grupos organizadas por centro. Con periodos instalados, son los grupos del periodo actual
+// (Semestre 3 · Grupo A); las cohortes sin grupo en el periodo van aparte. Sin periodos, son las cohortes.
 // En modo «Organizar centros» (solo coordinación) se arrastran de un centro a otro.
-export default function GruposCentros({ lista, cohortes, centros, filtroCentro, admin, abrirGrupo, alCambiar, avisar }) {
+export default function GruposCentros({ lista, cohortes, centros, filtroCentro, admin, abrirGrupo, alCambiar, avisar, grupos = [], periodo = null, nombreFormador = () => null }) {
   const [organizar, setOrganizar] = useState(false)
   const [arrastre, setArrastre] = useState(null) // { g, x, y, sobre }
   const [mover, setMover] = useState(null) // { g, destino }
   const [trabajando, setTrabajando] = useState(false)
   const dialogo = useRef(null)
 
+  const porGrupo = grupos.length > 0
   const secciones = useMemo(() => {
     const cuenta = new Map()
     for (const e of lista) {
@@ -62,17 +63,33 @@ export default function GruposCentros({ lista, cohortes, centros, filtroCentro, 
       c.total++; if (e.estado === 'activo') c.activos++
       cuenta.set(k, c)
     }
-    const tarjeta = (c) => ({ ...c, ...(cuenta.get(c.id) ?? { total: 0, activos: 0 }) })
+    const conteo = (id) => cuenta.get(id) ?? { total: 0, activos: 0 }
+    const nombreCohorte = (id) => cohortes.find((c) => c.id === id)?.nombre
+    const deCohorte = (c) => ({ ...c, clave: `c${c.id}`, ...conteo(c.id),
+      detalle: [c.anio && `Año ${c.anio}`, c.semestre_actual && `Semestre ${c.semestre_actual}`].filter(Boolean).join(' · ') || 'Cohorte' })
+    const deGrupo = (g) => ({ id: g.cohorte_id, grupoId: g.id, clave: `g${g.id}`, centro_id: g.centro_id, nombre: `Semestre ${g.semestre} · ${g.nombre}`, etiqueta: `Semestre ${g.semestre}`, corto: g.nombre, ...conteo(g.cohorte_id),
+      detalle: [nombreCohorte(g.cohorte_id), nombreFormador(g.formador_id) ?? (admin ? 'sin formador' : null), g.dia].filter(Boolean).join(' · ') })
+    const tarjetas = porGrupo
+      ? [...grupos].sort((a, b) => a.semestre - b.semestre || a.nombre.localeCompare(b.nombre)).map(deGrupo)
+      : cohortes.map(deCohorte)
     const res = [...centros, { id: null, nombre: 'Sin centro' }]
       .filter((ce) => organizar || !filtroCentro || (filtroCentro === SIN_COHORTE ? ce.id === null : String(ce.id) === filtroCentro))
-      .map((ce) => ({ centro: ce, grupos: cohortes.filter((c) => (c.centro_id ?? null) === ce.id).map(tarjeta) }))
+      .map((ce) => ({ centro: ce, grupos: tarjetas.filter((t) => (t.centro_id ?? null) === ce.id) }))
       // Organizando se ven todos los centros, aunque estén vacíos, para poder soltar grupos en ellos
       .filter((x) => x.grupos.length || organizar)
-    if (!organizar && cuenta.has(SIN_COHORTE) && (!filtroCentro || filtroCentro === SIN_COHORTE)) {
-      res.push({ centro: { id: 'sin-cohorte', nombre: 'Por organizar' }, grupos: [{ id: SIN_COHORTE, nombre: 'Sin cohorte', ...cuenta.get(SIN_COHORTE) }] })
+    if (!organizar) {
+      if (porGrupo) {
+        // Cohortes con estudiantes que no tienen grupo en el periodo (periodos anteriores, rezagados…)
+        const conGrupo = new Set(grupos.map((g) => g.cohorte_id))
+        const otras = cohortes.filter((c) => !conGrupo.has(c.id) && conteo(c.id).total > 0).map(deCohorte)
+        if (otras.length && !filtroCentro) res.push({ centro: { id: 'otras', nombre: `Sin grupo en ${periodo?.nombre ?? 'el periodo'}` }, grupos: otras })
+      }
+      if (cuenta.has(SIN_COHORTE) && (!filtroCentro || filtroCentro === SIN_COHORTE)) {
+        res.push({ centro: { id: 'sin-cohorte', nombre: 'Por organizar' }, grupos: [{ id: SIN_COHORTE, clave: 'sin', nombre: 'Sin cohorte', detalle: 'Estudiantes sin grupo asignado', ...cuenta.get(SIN_COHORTE) }] })
+      }
     }
     return res
-  }, [lista, cohortes, centros, filtroCentro, organizar])
+  }, [lista, cohortes, centros, filtroCentro, organizar, grupos, periodo, porGrupo, admin]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const nombreCentro = (id) => (id === null ? 'Sin centro' : centros.find((c) => c.id === id)?.nombre ?? '')
 
@@ -117,7 +134,10 @@ export default function GruposCentros({ lista, cohortes, centros, filtroCentro, 
   async function confirmar(conEstudiantes) {
     const { g, destino } = mover
     setTrabajando(true)
-    const r1 = await supabase.from('cohortes').update({ centro_id: destino }).eq('id', g.id)
+    // Un grupo del periodo se mueve en «grupos» (la base de datos actualiza su cohorte); una cohorte suelta, directamente
+    const r1 = g.grupoId
+      ? await supabase.from('grupos').update({ centro_id: destino }).eq('id', g.grupoId)
+      : await supabase.from('cohortes').update({ centro_id: destino }).eq('id', g.id)
     let r2 = { error: null }
     if (!r1.error && conEstudiantes) r2 = await supabase.from('estudiantes').update({ centro_id: destino }).eq('cohorte_id', g.id)
     setTrabajando(false)
@@ -147,7 +167,7 @@ export default function GruposCentros({ lista, cohortes, centros, filtroCentro, 
       <div className="space-y-8">
         {secciones.map(({ centro, grupos }) => {
           const idDrop = centro.id === null ? SIN_CENTRO : centro.id
-          const soltable = organizar && centro.id !== 'sin-cohorte'
+          const soltable = organizar && !['sin-cohorte', 'otras'].includes(centro.id)
           const encima = arrastre && arrastre.sobre !== undefined && (arrastre.sobre ?? SIN_CENTRO) === idDrop
           return (
             <section key={centro.id ?? 'sin'} aria-labelledby={`centro-${centro.id ?? 'sin'}`}
@@ -165,9 +185,9 @@ export default function GruposCentros({ lista, cohortes, centros, filtroCentro, 
                 <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {grupos.map((g) => {
                     const col = colorDe(g.id)
-                    const levantado = arrastre?.g.id === g.id
+                    const levantado = arrastre?.g.clave === g.clave
                     return (
-                      <li key={g.id}>
+                      <li key={g.clave}>
                         {organizar && g.id !== SIN_COHORTE ? (
                           <div onPointerDown={(e) => iniciar(e, g)}
                             className={`w-full cursor-grab select-none rounded-2xl border border-slate-200 bg-white shadow-sm ${levantado ? 'opacity-40' : ''}`}>
