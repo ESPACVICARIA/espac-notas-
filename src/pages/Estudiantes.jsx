@@ -7,17 +7,26 @@ import { ordenarEstudiantes, mostrarNombre } from '../lib/planilla'
 
 const SIN_COHORTE = 'sin'
 
+// Recorrido para los botones «Anterior» y «Siguiente» de la ficha, y filtros recordados al volver.
+// Se guardan solo en esta pestaña del navegador (sessionStorage) y se borran al cerrarla.
+export const CLAVE_RECORRIDO = 'espac-recorrido-estudiantes'
+const CLAVE_FILTROS = 'espac-filtros-estudiantes'
+function leerFiltros() {
+  try { return JSON.parse(sessionStorage.getItem(CLAVE_FILTROS)) ?? {} } catch { return {} }
+}
+
 export default function Estudiantes({ perfil }) {
   const admin = perfil?.rol === 'admin'
   const [lista, setLista] = useState([])
   const [cohortes, setCohortes] = useState([])
-  const [busqueda, setBusqueda] = useState('')
-  const [filtroCohorte, setFiltroCohorte] = useState('')
-  const [filtroEstado, setFiltroEstado] = useState('')
-  const [filtroCentro, setFiltroCentro] = useState('')
+  const [inicial] = useState(leerFiltros)
+  const [busqueda, setBusqueda] = useState(inicial.busqueda ?? '')
+  const [filtroCohorte, setFiltroCohorte] = useState(inicial.cohorte ?? '')
+  const [filtroEstado, setFiltroEstado] = useState(inicial.estado ?? '')
+  const [filtroCentro, setFiltroCentro] = useState(inicial.centro ?? '')
   const [centros, setCentros] = useState([])
-  const [orden, setOrden] = useState('apellidos')
-  const [agrupar, setAgrupar] = useState(true)
+  const [orden, setOrden] = useState(inicial.orden ?? 'apellidos')
+  const [agrupar, setAgrupar] = useState(inicial.agrupar ?? true)
   const [cargando, setCargando] = useState(true)
   const [sel, setSel] = useState(new Set())
   const [aviso, setAviso] = useState(null)
@@ -78,6 +87,20 @@ export default function Estudiantes({ perfil }) {
     const todos = items.length > 0 && items.every((e) => sel.has(e.id))
     setSel((s) => { const n = new Set(s); items.forEach((e) => (todos ? n.delete(e.id) : n.add(e.id))); return n })
   }
+
+  // Recordar los filtros y el orden exacto en que se ve la lista
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(CLAVE_FILTROS, JSON.stringify({ busqueda, cohorte: filtroCohorte, estado: filtroEstado, centro: filtroCentro, orden, agrupar }))
+    } catch { /* el navegador no permite guardar: no pasa nada */ }
+  }, [busqueda, filtroCohorte, filtroEstado, filtroCentro, orden, agrupar])
+  useEffect(() => {
+    if (cargando) return
+    try {
+      const items = grupos.flatMap((g) => g.items)
+      sessionStorage.setItem(CLAVE_RECORRIDO, JSON.stringify(items.map((e) => ({ id: e.id, nombre: mostrarNombre(e, orden) }))))
+    } catch { /* sin almacenamiento: la ficha usará la cohorte del estudiante */ }
+  }, [grupos, orden, cargando])
 
   const navigate = useNavigate()
   function imprimir() {
