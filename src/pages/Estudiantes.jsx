@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { exportarEstudiantes, traerTodo } from '../lib/exportar'
 import { ordenarEstudiantes, mostrarNombre } from '../lib/planilla'
 import GruposCentros, { colorDe, IconoGrupo } from '../components/GruposCentros'
+import { cargarPeriodoActual } from '../lib/periodo'
 
 const SIN_COHORTE = 'sin'
 
@@ -38,14 +39,21 @@ export default function Estudiantes({ perfil }) {
   const [cohorteMasiva, setCohorteMasiva] = useState('')
   const [asignando, setAsignando] = useState(false)
 
+  const [per, setPer] = useState({ periodo: null, grupos: [] })
+  const [formadores, setFormadores] = useState([])
+
   async function cargar() {
     try {
-      const [ests, { data: cs }, { data: ce }] = await Promise.all([
+      const [ests, { data: cs }, { data: ce }, p, { data: fo }] = await Promise.all([
         traerTodo(() => supabase.from('estudiantes')
           .select('id, nombre_completo, numero_id, parroquia, estado, cohorte_id, centro_id, cohortes(nombre), centros!estudiantes_centro_id_fkey(nombre)').order('id')),
         supabase.from('cohortes').select('id, nombre, anio, semestre_actual, centro_id, centros!cohortes_centro_id_fkey(nombre)').order('anio', { ascending: false }).order('nombre'),
         supabase.from('centros').select('id, nombre').order('nombre'),
+        cargarPeriodoActual(perfil),
+        admin ? supabase.from('perfiles').select('id, nombre, correo').in('rol', ['admin', 'formador']) : Promise.resolve({ data: [] }),
       ])
+      setPer(p)
+      setFormadores(fo ?? [])
       setLista(ests)
       setCohortes(cs ?? [])
       setCentros(ce ?? [])
@@ -77,10 +85,15 @@ export default function Estudiantes({ perfil }) {
       porCohorte.get(k).push(e)
     }
     const res = cohortes.filter((c) => porCohorte.has(c.id))
-      .map((c) => ({ clave: c.id, titulo: `${c.nombre}${c.anio ? ` (${c.anio})` : ''}${c.centros?.nombre ? ` · ${c.centros.nombre}` : ''}${c.semestre_actual ? ` · Semestre ${c.semestre_actual} en curso` : ''}`, items: porCohorte.get(c.id) }))
+      .map((c) => {
+        const g = per.grupos.find((x) => x.cohorte_id === c.id)
+        return { clave: c.id, items: porCohorte.get(c.id),
+          titulo: g ? `Semestre ${g.semestre} · ${g.nombre} · ${c.centros?.nombre ?? 'Sin centro'} · ${c.nombre}`
+            : `${c.nombre}${c.anio ? ` (${c.anio})` : ''}${c.centros?.nombre ? ` · ${c.centros.nombre}` : ''}${c.semestre_actual ? ` · Semestre ${c.semestre_actual} en curso` : ''}` }
+      })
     if (porCohorte.has(SIN_COHORTE)) res.push({ clave: SIN_COHORTE, titulo: 'Sin cohorte', items: porCohorte.get(SIN_COHORTE) })
     return res
-  }, [agrupar, filtrados, cohortes])
+  }, [agrupar, filtrados, cohortes, per.grupos])
 
   function alternar(id) {
     setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -189,7 +202,18 @@ export default function Estudiantes({ perfil }) {
     setEliminando(false)
   }
 
-  const grupoAbierto = filtroCohorte === SIN_COHORTE ? { id: SIN_COHORTE, nombre: 'Sin cohorte' } : cohortes.find((c) => String(c.id) === filtroCohorte)
+  const nombreFormador = (id) => { const f = formadores.find((x) => x.id === id); return f ? (f.nombre || f.correo) : id && id === perfil?.id ? perfil.nombre : null }
+  // El grupo abierto: si la cohorte tiene grupo en el periodo actual, se muestra como «Semestre 3 · Grupo A»
+  const grupoAbierto = (() => {
+    if (filtroCohorte === SIN_COHORTE) return { id: SIN_COHORTE, nombre: 'Sin cohorte', detalle: 'Estudiantes sin grupo asignado' }
+    const c = cohortes.find((x) => String(x.id) === filtroCohorte)
+    if (!c) return null
+    const g = per.grupos.find((x) => x.cohorte_id === c.id)
+    const centro = (id) => centros.find((x) => x.id === id)?.nombre
+    return g
+      ? { id: c.id, nombre: `Semestre ${g.semestre} · ${g.nombre}`, detalle: [centro(g.centro_id) && `Centro ${centro(g.centro_id)}`, `Periodo ${per.periodo?.nombre}`, c.nombre, nombreFormador(g.formador_id) && `Formador: ${nombreFormador(g.formador_id)}`].filter(Boolean).join(' · ') }
+      : { id: c.id, nombre: c.nombre, detalle: [c.centros?.nombre && `Centro ${c.centros.nombre}`, c.semestre_actual && `Semestre ${c.semestre_actual}`].filter(Boolean).join(' · ') }
+  })()
   const mostrarTarjetas = vista === 'grupos' && !filtroCohorte && !busqueda.trim()
   const abrirGrupo = (id) => { setFiltroCohorte(String(id)); setSel(new Set()); window.scrollTo({ top: 0 }) }
   const volverAGrupos = () => { setFiltroCohorte(''); setFiltroEstado(''); setSel(new Set()); setVista('grupos') }
@@ -239,7 +263,8 @@ export default function Estudiantes({ perfil }) {
             </p>
           ) : (
             <GruposCentros lista={lista} cohortes={cohortes} centros={centros} filtroCentro={filtroCentro} admin={admin}
-              abrirGrupo={abrirGrupo} alCambiar={cargar} avisar={setAviso} />
+              abrirGrupo={abrirGrupo} alCambiar={cargar} avisar={setAviso}
+              grupos={per.grupos} periodo={per.periodo} nombreFormador={nombreFormador} />
           )}
         </>
       ) : (
@@ -257,9 +282,7 @@ export default function Estudiantes({ perfil }) {
           </span>
           <div className="min-w-0">
             <p className="font-serif text-lg font-semibold leading-tight">{grupoAbierto.nombre}</p>
-            <p className="text-xs text-slate-500">
-              {[grupoAbierto.centros?.nombre && `Centro ${grupoAbierto.centros.nombre}`, grupoAbierto.semestre_actual && `Semestre ${grupoAbierto.semestre_actual} en curso`].filter(Boolean).join(' · ')}
-            </p>
+            <p className="text-xs text-slate-500">{grupoAbierto.detalle}</p>
           </div>
         </div>
       )}
