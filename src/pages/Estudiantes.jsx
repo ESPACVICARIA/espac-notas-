@@ -11,6 +11,22 @@ const SIN_COHORTE = 'sin'
 // Se guardan solo en esta pestaña del navegador (sessionStorage) y se borran al cerrarla.
 export const CLAVE_RECORRIDO = 'espac-recorrido-estudiantes'
 const CLAVE_FILTROS = 'espac-filtros-estudiantes'
+// Colores de las tarjetas de grupo (uno fijo por cohorte)
+const COLORES = [
+  { fondo: '#FDE7E9', tinta: '#D93D4A' }, { fondo: '#FDF1DC', tinta: '#D98A1A' }, { fondo: '#DDF5E5', tinta: '#2E9E5B' },
+  { fondo: '#E1ECFE', tinta: '#3B6FE0' }, { fondo: '#FBE4F1', tinta: '#C93B8F' }, { fondo: '#ECE6FD', tinta: '#7C5CE0' },
+  { fondo: '#DDF3F2', tinta: '#11908C' },
+]
+const colorDe = (id) => COLORES[Math.abs(Number(id) || 0) % COLORES.length]
+
+function IconoGrupo({ className = 'h-7 w-7' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M22 10 12 5 2 10l10 5 10-5Z" /><path d="M6 12v5c3 2 9 2 12 0v-5" />
+    </svg>
+  )
+}
+
 function leerFiltros() {
   try { return JSON.parse(sessionStorage.getItem(CLAVE_FILTROS)) ?? {} } catch { return {} }
 }
@@ -27,6 +43,7 @@ export default function Estudiantes({ perfil }) {
   const [centros, setCentros] = useState([])
   const [orden, setOrden] = useState(inicial.orden ?? 'apellidos')
   const [agrupar, setAgrupar] = useState(inicial.agrupar ?? true)
+  const [vista, setVista] = useState(inicial.vista ?? 'grupos') // 'grupos' = tarjetas · 'lista' = listado completo
   const [cargando, setCargando] = useState(true)
   const [sel, setSel] = useState(new Set())
   const [aviso, setAviso] = useState(null)
@@ -91,9 +108,9 @@ export default function Estudiantes({ perfil }) {
   // Recordar los filtros y el orden exacto en que se ve la lista
   useEffect(() => {
     try {
-      sessionStorage.setItem(CLAVE_FILTROS, JSON.stringify({ busqueda, cohorte: filtroCohorte, estado: filtroEstado, centro: filtroCentro, orden, agrupar }))
+      sessionStorage.setItem(CLAVE_FILTROS, JSON.stringify({ busqueda, cohorte: filtroCohorte, estado: filtroEstado, centro: filtroCentro, orden, agrupar, vista }))
     } catch { /* el navegador no permite guardar: no pasa nada */ }
-  }, [busqueda, filtroCohorte, filtroEstado, filtroCentro, orden, agrupar])
+  }, [busqueda, filtroCohorte, filtroEstado, filtroCentro, orden, agrupar, vista])
   useEffect(() => {
     if (cargando) return
     try {
@@ -187,6 +204,30 @@ export default function Estudiantes({ perfil }) {
     setEliminando(false)
   }
 
+  // Tarjetas de grupos: una por cohorte, organizadas por centro
+  const secciones = useMemo(() => {
+    const cuenta = new Map()
+    for (const e of lista) {
+      const k = e.cohorte_id ?? SIN_COHORTE
+      const c = cuenta.get(k) ?? { total: 0, activos: 0 }
+      c.total++; if (e.estado === 'activo') c.activos++
+      cuenta.set(k, c)
+    }
+    const tarjeta = (c) => ({ ...c, ...(cuenta.get(c.id) ?? { total: 0, activos: 0 }) })
+    const res = [...centros, { id: null, nombre: 'Sin centro' }]
+      .filter((ce) => !filtroCentro || (filtroCentro === SIN_COHORTE ? ce.id === null : String(ce.id) === filtroCentro))
+      .map((ce) => ({ centro: ce, grupos: cohortes.filter((c) => (c.centro_id ?? null) === ce.id).map(tarjeta) }))
+      .filter((x) => x.grupos.length)
+    if (cuenta.has(SIN_COHORTE) && (!filtroCentro || filtroCentro === SIN_COHORTE)) {
+      res.push({ centro: { id: 'sin-cohorte', nombre: 'Por organizar' }, grupos: [{ id: SIN_COHORTE, nombre: 'Sin cohorte', ...cuenta.get(SIN_COHORTE) }] })
+    }
+    return res
+  }, [lista, cohortes, centros, filtroCentro])
+  const grupoAbierto = filtroCohorte === SIN_COHORTE ? { id: SIN_COHORTE, nombre: 'Sin cohorte' } : cohortes.find((c) => String(c.id) === filtroCohorte)
+  const mostrarTarjetas = vista === 'grupos' && !filtroCohorte && !busqueda.trim()
+  const abrirGrupo = (id) => { setFiltroCohorte(String(id)); setSel(new Set()); window.scrollTo({ top: 0 }) }
+  const volverAGrupos = () => { setFiltroCohorte(''); setFiltroEstado(''); setSel(new Set()); setVista('grupos') }
+
   const hayFiltros = busqueda || filtroCohorte || filtroEstado || filtroCentro
   const limpiar = () => { setBusqueda(''); setFiltroCohorte(''); setFiltroEstado(''); setFiltroCentro('') }
 
@@ -199,13 +240,106 @@ export default function Estudiantes({ perfil }) {
             {hayFiltros ? `${filtrados.length} de ${lista.length} estudiantes` : `${lista.length} catequistas en formación`}
           </p>
         </div>
-        {admin && <Link to="/estudiantes/nuevo" className="btn">Matricular estudiante</Link>}
+        <div className="flex flex-wrap items-center gap-3">
+          <div role="group" aria-label="Forma de ver" className="flex gap-1 rounded-xl bg-slate-200/60 p-1">
+            {[['grupos', 'Grupos'], ['lista', 'Lista completa']].map(([v, t]) => {
+              const activo = v === 'grupos' ? vista === 'grupos' && !busqueda.trim() : vista === 'lista' || !!busqueda.trim()
+              return (
+                <button key={v} aria-pressed={activo} onClick={() => (v === 'grupos' ? volverAGrupos() : (setVista('lista'), setFiltroCohorte('')))}
+                  className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors ${activo ? 'bg-white text-tinta shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-tinta'}`}>{t}</button>
+              )
+            })}
+          </div>
+          {admin && <Link to="/estudiantes/nuevo" className="btn">Matricular estudiante</Link>}
+        </div>
       </div>
+
+      {mostrarTarjetas ? (
+        <>
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <input className="campo max-w-sm" placeholder="Buscar estudiante por nombre o documento" aria-label="Buscar estudiante"
+              value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+            <div role="group" aria-label="Centro" className="flex flex-wrap gap-1.5">
+              {[['', 'Todos los centros'], ...centros.map((c) => [String(c.id), c.nombre])].map(([v, t]) => (
+                <button key={v} aria-pressed={filtroCentro === v} onClick={() => setFiltroCentro(v)}
+                  className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-colors ${filtroCentro === v ? 'border-tinta bg-tinta text-white' : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'}`}>{t}</button>
+              ))}
+            </div>
+          </div>
+          {aviso && <p className={`mb-4 text-sm ${aviso.tipo === 'error' ? 'text-alerta' : 'text-green-700'}`}>{aviso.texto}</p>}
+          {cargando ? <p className="text-slate-500">Cargando…</p> : !secciones.length ? (
+            <p className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+              Aún no hay cohortes. Créalas en Configuración, o matricula estudiantes para empezar.
+            </p>
+          ) : (
+            <div className="space-y-8">
+              {secciones.map(({ centro, grupos: gs }) => (
+                <section key={centro.id ?? 'sin'} aria-labelledby={`centro-${centro.id ?? 'sin'}`}>
+                  <div className="mb-3 flex items-baseline gap-3">
+                    <h2 id={`centro-${centro.id ?? 'sin'}`} className="font-serif text-xl font-semibold">
+                      {centro.id && centro.id !== 'sin-cohorte' ? `Centro ${centro.nombre}` : centro.nombre}
+                    </h2>
+                    <span className="text-sm text-slate-500">{gs.length} grupo(s) · {gs.reduce((n, g) => n + g.activos, 0)} activos</span>
+                  </div>
+                  <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {gs.map((g) => {
+                      const col = g.id === SIN_COHORTE ? { fondo: '#EEF1F5', tinta: '#64748B' } : colorDe(g.id)
+                      return (
+                        <li key={g.id}>
+                          <button onClick={() => abrirGrupo(g.id)}
+                            className="group relative flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-mariano/20">
+                            <span aria-hidden="true" className="absolute right-4 top-4 h-3 w-3 rounded-full" style={{ background: col.tinta }} />
+                            <span className="grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: col.fondo, color: col.tinta }}>
+                              <IconoGrupo />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-serif text-lg font-semibold leading-tight text-tinta">{g.nombre}</span>
+                              <span className="mt-0.5 block text-xs text-slate-500">
+                                {[g.anio && `Año ${g.anio}`, g.semestre_actual && `Semestre ${g.semestre_actual} en curso`].filter(Boolean).join(' · ') || 'Estudiantes sin grupo asignado'}
+                              </span>
+                              <span className="mt-3 flex flex-wrap gap-1.5 text-xs">
+                                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-tinta">{g.activos} activo(s)</span>
+                                {g.total > g.activos && <span className="rounded-full bg-slate-50 px-2.5 py-1 text-slate-500">{g.total - g.activos} inactivo(s)</span>}
+                              </span>
+                            </span>
+                            <svg viewBox="0 0 20 20" className="h-5 w-5 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-mariano" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m8 5 5 5-5 5" /></svg>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+      <>
+      {grupoAbierto && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <button onClick={volverAGrupos} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-mariano hover:bg-cielo">
+            <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 15 7 10l5-5" /></svg>
+            Todos los grupos
+          </button>
+          <span className="h-5 w-px bg-slate-200" aria-hidden="true" />
+          <span className="grid h-9 w-9 place-items-center rounded-full" aria-hidden="true"
+            style={grupoAbierto.id === SIN_COHORTE ? { background: '#EEF1F5', color: '#64748B' } : { background: colorDe(grupoAbierto.id).fondo, color: colorDe(grupoAbierto.id).tinta }}>
+            <IconoGrupo className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-serif text-lg font-semibold leading-tight">{grupoAbierto.nombre}</p>
+            <p className="text-xs text-slate-500">
+              {[grupoAbierto.centros?.nombre && `Centro ${grupoAbierto.centros.nombre}`, grupoAbierto.semestre_actual && `Semestre ${grupoAbierto.semestre_actual} en curso`].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
         <div>
           <label className="etiqueta" htmlFor="buscar">Buscar</label>
           <input id="buscar" className="campo" placeholder="Nombre o documento"
+            autoFocus={vista === 'grupos' && !!busqueda} onFocus={(e) => { const n = e.target.value.length; e.target.setSelectionRange(n, n) }}
             value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
         </div>
         <div>
@@ -361,6 +495,8 @@ export default function Estudiantes({ perfil }) {
             )
           })}
         </div>
+      )}
+      </>
       )}
     </section>
   )
