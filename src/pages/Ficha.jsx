@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { fmt } from '../lib/notas'
@@ -10,6 +10,12 @@ import { ordenarEstudiantes, mostrarNombre } from '../lib/planilla'
 const CLAVE_RECORRIDO = 'espac-recorrido-estudiantes'
 function leerRecorrido() {
   try { const r = JSON.parse(sessionStorage.getItem(CLAVE_RECORRIDO)); return Array.isArray(r) ? r : [] } catch { return [] }
+}
+
+// Semestre elegido para ver las notas: se mantiene al pasar de un estudiante a otro (solo en esta pestaña)
+const CLAVE_SEMESTRE = 'espac-semestre-ficha'
+function leerSemestre() {
+  try { return sessionStorage.getItem(CLAVE_SEMESTRE) } catch { return null }
 }
 
 const Flecha = ({ d }) => (
@@ -30,6 +36,17 @@ export default function Ficha({ perfil }) {
   const [formadores, setFormadores] = useState({})
   const [acceso, setAcceso] = useState(null)
   const [recorrido, setRecorrido] = useState(leerRecorrido)
+  const [semElegido, setSemElegido] = useState(leerSemestre) // null = el semestre actual de la cohorte
+  const barraSem = useRef(null)
+  // En celular la barra de semestres se desliza sola para mostrar el elegido (sin mover la página)
+  useEffect(() => {
+    const c = barraSem.current, b = c?.querySelector('[aria-pressed="true"]')
+    if (c && b) c.scrollLeft = b.offsetLeft - (c.clientWidth - b.offsetWidth) / 2
+  }, [semElegido, pestana, est?.id, espacios.length])
+  function elegirSemestre(v) {
+    setSemElegido(v)
+    try { sessionStorage.setItem(CLAVE_SEMESTRE, v) } catch { /* sin almacenamiento: vale para esta visita */ }
+  }
 
   // Si la ficha se abrió sin pasar por el listado (enlace directo o recarga), se recorre la cohorte del estudiante
   useEffect(() => {
@@ -61,7 +78,7 @@ export default function Ficha({ perfil }) {
     let vigente = true
     setAviso(null); setAcceso(null); setFormadores({}); setNotas({})
     window.scrollTo({ top: 0 })
-    supabase.from('estudiantes').select('*, cohortes(nombre), centros!estudiantes_centro_id_fkey(nombre)').eq('id', id).single().then(async ({ data }) => {
+    supabase.from('estudiantes').select('*, cohortes(nombre, semestre_actual), centros!estudiantes_centro_id_fkey(nombre)').eq('id', id).single().then(async ({ data }) => {
       if (!vigente) return
       setEst(data)
       if (data?.cohorte_id) {
@@ -97,6 +114,10 @@ export default function Ficha({ perfil }) {
   const cargandoOtro = est.id !== id
 
   const { semestres, general } = resumen(espacios, notas)
+  const semActual = est.cohortes?.semestre_actual ? String(est.cohortes.semestre_actual) : null
+  const verSem = semElegido ?? semActual ?? 'todos'
+  const semVisible = verSem === 'todos' ? semestres : semestres.filter((x) => String(x.s) === verSem)
+  const datoSem = verSem === 'todos' ? null : semestres.find((x) => String(x.s) === verSem)
 
   const datos = [
     ['Documento', `${est.tipo_id ?? ''} ${est.numero_id ?? ''}`], ['Parroquia', est.parroquia], ['Centro de formación', est.centro_formacion],
@@ -183,7 +204,32 @@ export default function Ficha({ perfil }) {
           ))}
         </dl>
       ) : (
-        <TablasSemestres semestres={semestres} notas={notas} formadores={formadores} />
+        <>
+          <div className="mb-5 flex flex-wrap items-center gap-3 print:hidden">
+            <span className="text-sm font-semibold text-slate-600">Ver notas de</span>
+            <div ref={barraSem} role="group" aria-label="Semestre" className="relative -mx-1 max-w-full overflow-x-auto px-1">
+              <div className="flex w-max gap-1 rounded-xl bg-slate-200/60 p-1">
+                {[['todos', 'Todos'], ...semestres.map((x) => [String(x.s), `Semestre ${x.s}`])].map(([v, t]) => (
+                  <button key={v} onClick={() => elegirSemestre(v)} aria-pressed={verSem === v}
+                    className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                      verSem === v ? 'bg-white text-tinta shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:bg-white/60 hover:text-tinta'}`}>
+                    {t}
+                    {v === semActual && <span className="rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-oro">actual</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {datoSem && (
+              <span className="text-sm text-slate-500">
+                Promedio del semestre {datoSem.s}: <strong className="font-serif text-lg text-tinta tabular-nums">{fmt(datoSem.prom)}</strong>
+                <span className="ml-2 text-xs">({datoSem.completos} de {datoSem.total} con nota)</span>
+              </span>
+            )}
+          </div>
+          {verSem === 'todos' || datoSem?.items.length
+            ? <TablasSemestres semestres={semVisible} notas={notas} formadores={formadores} />
+            : <p className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">Este semestre aún no tiene módulos, retiros ni seminarios.</p>}
+        </>
       )}
     </section>
   )
