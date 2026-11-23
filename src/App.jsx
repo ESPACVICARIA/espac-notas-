@@ -17,6 +17,7 @@ import Modulos from './pages/Modulos'
 import Biblioteca from './pages/Biblioteca'
 import Mensajes from './pages/Mensajes'
 import Estudio from './pages/Estudio'
+import Periodos from './pages/Periodos'
 
 export default function App() {
   const { sesion, perfil, cargando } = useSesion()
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/estudio" element={puedeCalificar ? <Estudio perfil={perfil} /> : <Navigate to="/" />} />
         <Route path="/mensajes" element={puedeCalificar ? <Mensajes perfil={perfil} /> : <Navigate to="/" />} />
         <Route path="/documentos" element={puedeCalificar ? <Biblioteca perfil={perfil} /> : <Navigate to="/" />} />
+        <Route path="/periodos" element={admin ? <Periodos perfil={perfil} /> : <Navigate to="/" />} />
         <Route path="/modulos" element={admin ? <Modulos /> : <Navigate to="/" />} />
         <Route path="/configuracion" element={admin ? <Configuracion /> : <Navigate to="/" />} />
         <Route path="*" element={<Navigate to="/" />} />
