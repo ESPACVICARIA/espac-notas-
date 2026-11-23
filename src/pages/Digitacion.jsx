@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { cargarPeriodoActual } from '../lib/periodo'
 import { CAMPOS, definitiva, promedio, fmt, parsearNota, NOTA_MINIMA } from '../lib/notas'
 import { ordenarEstudiantes, mostrarNombre, copiarColumna } from '../lib/planilla'
 import Actividades from '../components/Actividades'
@@ -32,7 +34,12 @@ export default function Digitacion({ perfil }) {
   const admin = perfil?.rol === 'admin'
   const [opciones, setOpciones] = useState([])
   const [espacios, setEspacios] = useState([])
-  const [sel, setSel] = useState({ cohorte: '', semestre: '', espacio: '' })
+  const [sel, setSel] = useState({ grupo: '', cohorte: '', semestre: '', espacio: '' })
+  // Periodo actual: se digita por grupo. «cohorte» = forma anterior, para notas de periodos pasados.
+  const [per, setPer] = useState({ instalado: false, periodo: null, grupos: [] })
+  const [modo, setModo] = useState('cargando')
+  const [centros, setCentros] = useState([])
+  const { search } = useLocation()
   const [crudos, setCrudos] = useState([])
   const [valores, setValores] = useState({})
   const [sucios, setSucios] = useState(new Set())
@@ -57,7 +64,33 @@ export default function Digitacion({ perfil }) {
       supabase.from('asignaciones').select('cohorte_id, semestre, cohortes(nombre)').eq('formador_id', perfil.id)
         .then(({ data }) => setOpciones((data ?? []).map((a) => ({ cohorte_id: a.cohorte_id, nombre: a.cohortes?.nombre, semestre: a.semestre }))))
     }
-  }, [admin, perfil?.id])
+    supabase.from('centros').select('id, nombre').order('nombre').then(({ data }) => setCentros(data ?? []))
+    cargarPeriodoActual(perfil).then((r) => {
+      setPer(r)
+      const porGrupo = r.periodo && r.grupos.length > 0
+      setModo(porGrupo ? 'grupo' : 'cohorte')
+      // Enlace directo desde «Mis grupos»: /notas?grupo=ID&espacio=ID
+      const q = new URLSearchParams(search)
+      const g = porGrupo && r.grupos.find((x) => String(x.id) === q.get('grupo'))
+      if (g) setSel({ grupo: String(g.id), cohorte: String(g.cohorte_id), semestre: String(g.semestre), espacio: q.get('espacio') ?? '' })
+    })
+  }, [admin, perfil?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const grupo = per.grupos.find((g) => String(g.id) === sel.grupo)
+  const nombreGrupo = (g) => `${centros.find((c) => c.id === g.centro_id)?.nombre ?? 'Sin centro'} · Semestre ${g.semestre} · ${g.nombre}`
+  const gruposPorCentro = useMemo(() => {
+    const m = new Map()
+    for (const g of [...per.grupos].sort((a, b) => a.semestre - b.semestre || a.nombre.localeCompare(b.nombre))) {
+      const k = centros.find((c) => c.id === g.centro_id)?.nombre ?? 'Sin centro'
+      if (!m.has(k)) m.set(k, [])
+      m.get(k).push(g)
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [per.grupos, centros])
+  function cambiarModo(m) {
+    if (sucios.size && !confirm('Tienes notas sin guardar. ¿Salir sin guardarlas?')) return
+    setSel({ grupo: '', cohorte: '', semestre: '', espacio: '' }); setVista('planilla'); setModo(m)
+  }
 
   const cohortes = useMemo(() => [...new Map(opciones.map((o) => [o.cohorte_id, o.nombre])).entries()], [opciones])
   const semestres = opciones.filter((o) => String(o.cohorte_id) === sel.cohorte).map((o) => o.semestre)
@@ -177,9 +210,33 @@ export default function Digitacion({ perfil }) {
         <p className="subtitulo-pagina">Escala de 0,0 a 5,0. Deja la casilla vacía si esa nota no aplica: no cuenta en el promedio.</p>
       </header>
 
-      {opciones.length === 0 ? (
+      {modo === 'cargando' ? null : modo === 'cohorte' && opciones.length === 0 ? (
         <div className="tarjeta px-6 py-10 text-center text-slate-500">
           {admin ? 'Crea una cohorte en Configuración para empezar.' : 'Aún no tienes grupos asignados. La coordinación debe asignarte una cohorte y un semestre.'}
+        </div>
+      ) : modo === 'grupo' ? (
+        <div className="tarjeta mb-6 grid divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0 print:hidden">
+          <Paso n={1} id="g" titulo={`Grupo · periodo ${per.periodo?.nombre ?? ''}`} activo listo={!!sel.grupo}
+            ayuda={grupo ? `Cohorte: ${cohortes.find(([id]) => id === grupo.cohorte_id)?.[1] ?? '—'}${grupo.dia ? ` · ${grupo.dia}` : ''}` : admin ? `${per.grupos.length} grupos en el periodo` : `${per.grupos.length} grupo(s) a tu cargo`}>
+            <select id="g" className="campo" value={sel.grupo} onChange={(e) => {
+              const g = per.grupos.find((x) => String(x.id) === e.target.value)
+              elegir(g ? { grupo: String(g.id), cohorte: String(g.cohorte_id), semestre: String(g.semestre), espacio: '' } : { grupo: '', cohorte: '', semestre: '', espacio: '' })
+            }}>
+              <option value="">Elige el grupo…</option>
+              {gruposPorCentro.map(([centro, gs]) => (
+                <optgroup key={centro} label={`Centro ${centro}`}>
+                  {gs.map((g) => <option key={g.id} value={g.id}>Semestre {g.semestre} · {g.nombre}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </Paso>
+          <Paso n={2} id="e" titulo="Módulo, retiro o seminario" activo={!!sel.grupo} listo={!!sel.espacio}
+            ayuda={!sel.grupo ? 'Primero elige el grupo' : sel.espacio ? (espacio?.tipo === 'retiro' ? 'Retiro' : espacio?.tipo === 'seminario' ? 'Seminario' : 'Módulo') : `Del semestre ${sel.semestre}`}>
+            <select id="e" className="campo" disabled={!sel.grupo} value={sel.espacio} onChange={(e) => elegir({ ...sel, espacio: e.target.value })}>
+              <option value="">Elige el módulo…</option>
+              {espaciosSem.map((e) => <option key={e.id} value={e.id}>{e.etiqueta} · {e.nombre}</option>)}
+            </select>
+          </Paso>
         </div>
       ) : (
         <div className="tarjeta mb-6 grid divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0 print:hidden">
@@ -207,14 +264,22 @@ export default function Digitacion({ perfil }) {
         </div>
       )}
 
-      {opciones.length > 0 && !sel.semestre && (
+      {modo !== 'cargando' && per.periodo && per.grupos.length > 0 && (
+        <p className="-mt-3 mb-6 text-sm print:hidden">
+          {modo === 'grupo'
+            ? <button className="text-slate-500 underline hover:text-mariano" onClick={() => cambiarModo('cohorte')}>¿Notas de un periodo anterior? Buscar por cohorte y semestre</button>
+            : <button className="font-semibold text-mariano underline" onClick={() => cambiarModo('grupo')}>← Volver a los grupos del periodo {per.periodo.nombre}</button>}
+        </p>
+      )}
+
+      {modo !== 'cargando' && (modo === 'grupo' || opciones.length > 0) && !sel.semestre && (
         <div className="tarjeta flex flex-col items-center px-6 py-12 text-center print:hidden">
           <span className="grid h-12 w-12 place-items-center rounded-full bg-cielo text-mariano" aria-hidden="true">
             <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 13h6M9 17h4" />
             </svg>
           </span>
-          <p className="mt-4 font-semibold text-tinta">Elige la cohorte y el semestre</p>
+          <p className="mt-4 font-semibold text-tinta">{modo === 'grupo' ? 'Elige el grupo' : 'Elige la cohorte y el semestre'}</p>
           <p className="mt-1 max-w-md text-sm text-slate-500">Después escoge el módulo, retiro o seminario para ver la planilla, la asistencia, los repasos y las demás herramientas.</p>
         </div>
       )}
