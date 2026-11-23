@@ -1,9 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { fmt } from '../lib/notas'
 import { resumen, Camino, TablasSemestres } from '../components/Itinerario'
 import FotoEstudiante from '../components/FotoEstudiante'
+import { ordenarEstudiantes, mostrarNombre } from '../lib/planilla'
+
+// El listado de Estudiantes guarda aquí el orden en que se ve (con sus filtros)
+const CLAVE_RECORRIDO = 'espac-recorrido-estudiantes'
+function leerRecorrido() {
+  try { const r = JSON.parse(sessionStorage.getItem(CLAVE_RECORRIDO)); return Array.isArray(r) ? r : [] } catch { return [] }
+}
+
+const Flecha = ({ d }) => (
+  <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
+)
 
 const fecha = (f) => (f ? new Date(f + 'T00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }) : '—')
 
@@ -18,20 +29,52 @@ export default function Ficha({ perfil }) {
   const [aviso, setAviso] = useState(null)
   const [formadores, setFormadores] = useState({})
   const [acceso, setAcceso] = useState(null)
+  const [recorrido, setRecorrido] = useState(leerRecorrido)
+
+  // Si la ficha se abrió sin pasar por el listado (enlace directo o recarga), se recorre la cohorte del estudiante
+  useEffect(() => {
+    if (!est || recorrido.some((r) => r.id === est.id)) return
+    if (!est.cohorte_id) { setRecorrido([]); return }
+    supabase.from('estudiantes').select('id, nombre_completo').eq('cohorte_id', est.cohorte_id).then(({ data }) => {
+      setRecorrido(ordenarEstudiantes(data ?? [], 'apellidos').map((e) => ({ id: e.id, nombre: mostrarNombre(e, 'apellidos') })))
+    })
+  }, [est]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pos = useMemo(() => recorrido.findIndex((r) => r.id === id), [recorrido, id])
+  const anterior = pos > 0 ? recorrido[pos - 1] : null
+  const siguiente = pos >= 0 && pos < recorrido.length - 1 ? recorrido[pos + 1] : null
+  const ir = (r) => r && navigate(`/estudiantes/${r.id}`)
+
+  // Flechas ← → del teclado, siempre que no se esté escribiendo en un campo
+  useEffect(() => {
+    const tecla = (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return
+      if (e.key === 'ArrowRight' && siguiente) ir(siguiente)
+      if (e.key === 'ArrowLeft' && anterior) ir(anterior)
+    }
+    window.addEventListener('keydown', tecla)
+    return () => window.removeEventListener('keydown', tecla)
+  }, [anterior, siguiente]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    // Al pasar a otro estudiante se limpia lo del anterior y se descartan respuestas que lleguen tarde
+    let vigente = true
+    setAviso(null); setAcceso(null); setFormadores({}); setNotas({})
+    window.scrollTo({ top: 0 })
     supabase.from('estudiantes').select('*, cohortes(nombre), centros!estudiantes_centro_id_fkey(nombre)').eq('id', id).single().then(async ({ data }) => {
+      if (!vigente) return
       setEst(data)
       if (data?.cohorte_id) {
         const { data: f } = await supabase.rpc('formadores_cohorte', { p_cohorte: data.cohorte_id })
-        setFormadores(f ?? {})
+        if (vigente) setFormadores(f ?? {})
       }
     })
-    supabase.from('espacios').select('*').order('semestre').order('orden').order('id').then(({ data }) => setEspacios(data ?? []))
-    if (admin) supabase.rpc('estado_acceso_estudiante', { p_estudiante: id }).then(({ data }) => setAcceso(data ?? null))
+    if (!espacios.length) supabase.from('espacios').select('*').order('semestre').order('orden').order('id').then(({ data }) => setEspacios(data ?? []))
+    if (admin) supabase.rpc('estado_acceso_estudiante', { p_estudiante: id }).then(({ data }) => { if (vigente) setAcceso(data ?? null) })
     supabase.from('notas').select('*').eq('estudiante_id', id)
-      .then(({ data }) => setNotas(Object.fromEntries((data ?? []).map((n) => [n.espacio_id, n]))))
-  }, [id])
+      .then(({ data }) => { if (vigente) setNotas(Object.fromEntries((data ?? []).map((n) => [n.espacio_id, n]))) })
+    return () => { vigente = false }
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function restablecer() {
     if (!confirm('La contraseña del estudiante volverá a ser su número de documento. ¿Continuar?')) return
@@ -51,6 +94,7 @@ export default function Ficha({ perfil }) {
   }
 
   if (!est) return <p className="text-slate-500">Cargando…</p>
+  const cargandoOtro = est.id !== id
 
   const { semestres, general } = resumen(espacios, notas)
 
@@ -62,13 +106,38 @@ export default function Ficha({ perfil }) {
   ]
 
   return (
-    <section>
+    <section className={cargandoOtro ? 'opacity-60 transition-opacity' : 'transition-opacity'} aria-busy={cargandoOtro}>
+      {/* Navegación entre estudiantes */}
+      <nav aria-label="Navegación entre estudiantes" className="mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm print:hidden">
+        <Link to="/" className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-mariano hover:bg-cielo">
+          <Flecha d="M12 15 7 10l5-5" /> Estudiantes
+        </Link>
+        {pos >= 0 && recorrido.length > 1 && (
+          <>
+            <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:block" aria-hidden="true" />
+            <span className="text-sm text-slate-500 tabular-nums" aria-live="polite">
+              Estudiante <strong className="text-tinta">{pos + 1}</strong> de {recorrido.length}
+            </span>
+            <span className="ml-auto flex items-center gap-2">
+              <button onClick={() => ir(anterior)} disabled={!anterior} title={anterior ? `${anterior.nombre} (tecla ←)` : 'Es el primero de la lista'}
+                className="btn-sec px-3 py-1.5">
+                <Flecha d="M12 15 7 10l5-5" /> <span className="hidden sm:inline">Anterior</span>
+              </button>
+              <button onClick={() => ir(siguiente)} disabled={!siguiente} title={siguiente ? `${siguiente.nombre} (tecla →)` : 'Es el último de la lista'}
+                className="btn px-3 py-1.5">
+                Siguiente <Flecha d="m8 5 5 5-5 5" />
+              </button>
+            </span>
+            {siguiente && <p className="w-full truncate text-right text-xs text-slate-400 sm:pr-1">Sigue: {siguiente.nombre}</p>}
+          </>
+        )}
+      </nav>
+
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-5">
-          <FotoEstudiante estudiante={est} editable={admin} alCambiar={(ruta) => setEst({ ...est, foto_url: ruta })} />
+          <FotoEstudiante key={est.id} estudiante={est} editable={admin} alCambiar={(ruta) => setEst({ ...est, foto_url: ruta })} />
           <div>
-            <Link to="/" className="text-sm text-mariano hover:underline">Volver a estudiantes</Link>
-            <h1 className="mt-2 text-3xl font-semibold">{est.nombre_completo}</h1>
+            <h1 className="text-3xl font-semibold">{est.nombre_completo}</h1>
             <p className="text-sm text-slate-500">{est.parroquia}</p>
           </div>
         </div>
