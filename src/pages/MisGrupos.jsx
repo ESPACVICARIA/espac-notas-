@@ -145,7 +145,7 @@ export default function MisGrupos({ perfil }) {
           )}
           <div className="grid gap-5 lg:grid-cols-2">
             {visibles.map((g) => (
-              <TarjetaGrupo key={g.id} g={g} centro={centroDe(g.centro_id)} formador={formadorDe(g.formador_id)} espacios={espacios}
+              <TarjetaGrupo key={g.id} g={g} centro={centroDe(g.centro_id)} formador={g.formador_nombre ?? formadorDe(g.formador_id)} espacios={espacios}
                 alumnos={porGrupo.get(g.id) ?? []} admin={admin} />
             ))}
           </div>
