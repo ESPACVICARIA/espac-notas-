@@ -19,6 +19,10 @@ const ESTADOS_MATRICULA = {
 }
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 const SIN_CENTRO = 'ninguno'
+const OTRO = '__otro'
+const MOTIVOS = ['Traslado de parroquia o destino', 'Reemplazo temporal', 'Enfermedad o incapacidad', 'Renuncia', 'Reorganización de grupos', 'Corrección de datos']
+const hoyISO = () => new Date().toLocaleDateString('en-CA')
+const fechaLarga = (f) => (f ? new Date(`${f}T12:00:00`).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }) : null)
 const letra = (n) => `Grupo ${String.fromCharCode(65 + n)}`
 const falla = (r) => { if (r?.error) throw r.error; return r }
 const fechaCorta = (f) => (f ? new Date(`${f}T12:00:00`).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }) : '—')
@@ -59,7 +63,7 @@ function FormGrupo({ grupo, periodo, centros, cohortes, formadores, grupos, guar
   const nuevo = !grupo
   const [f, setF] = useState(() => grupo
     ? { centro: grupo.centro_id ?? SIN_CENTRO, semestre: grupo.semestre, nombre: grupo.nombre, formador: grupo.formador_id ?? '', dia: grupo.dia ?? '', horario: grupo.horario ?? '', cupo: grupo.cupo ?? '' }
-    : { centro: centros[0]?.id ?? SIN_CENTRO, semestre: 1, nombre: '', formador: '', dia: 'Sábado', horario: '', cupo: '', origen: 'nueva', cohorte: '' })
+    : { centro: centros[0]?.id ?? SIN_CENTRO, semestre: 1, nombre: '', formador: '', formadorNombre: '', dia: 'Sábado', horario: '', cupo: '', origen: 'nueva', cohorte: '' })
   const [error, setError] = useState('')
   const [trabajando, setTrabajando] = useState(false)
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }))
@@ -79,14 +83,17 @@ function FormGrupo({ grupo, periodo, centros, cohortes, formadores, grupos, guar
       setError(`Ya existe «${nombre}» en ese centro y semestre.`); return
     }
     if (nuevo && f.origen === 'continua' && !f.cohorte) { setError('Elige la cohorte que continúa.'); return }
+    if (nuevo && f.formador === OTRO && !f.formadorNombre.trim()) { setError('Escribe el nombre del formador sin cuenta.'); return }
     const cupo = f.cupo === '' ? null : Number(f.cupo)
     if (cupo !== null && (!Number.isInteger(cupo) || cupo < 1 || cupo > 200)) { setError('El cupo debe ser un número entre 1 y 200.'); return }
     setTrabajando(true); setError('')
     try {
-      await guardar({
-        nombre, centro_id: f.centro === SIN_CENTRO ? null : Number(f.centro), semestre: Number(f.semestre),
-        formador_id: f.formador || null, dia: f.dia || null, horario: f.horario.trim() || null, cupo,
-      }, nuevo ? { origen: f.origen, cohorte: f.cohorte } : null)
+      const datos = { nombre, centro_id: f.centro === SIN_CENTRO ? null : Number(f.centro), semestre: Number(f.semestre), dia: f.dia || null, horario: f.horario.trim() || null, cupo }
+      if (nuevo) {
+        datos.formador_id = f.formador && f.formador !== OTRO ? f.formador : null
+        datos.formador_nombre = f.formador === OTRO ? f.formadorNombre.trim() : null
+      }
+      await guardar(datos, nuevo ? { origen: f.origen, cohorte: f.cohorte } : null)
       cerrar()
     } catch (err) {
       setError(err.message); setTrabajando(false)
@@ -113,13 +120,23 @@ function FormGrupo({ grupo, periodo, centros, cohortes, formadores, grupos, guar
           <label className="etiqueta" htmlFor="g-nombre">Nombre del grupo</label>
           <input id="g-nombre" className="campo" maxLength={60} placeholder={sugerido} value={f.nombre} onChange={(e) => set('nombre', e.target.value)} />
         </div>
-        <div>
-          <label className="etiqueta" htmlFor="g-form">Formador del semestre</label>
-          <select id="g-form" className="campo" value={f.formador} onChange={(e) => set('formador', e.target.value)}>
-            <option value="">Sin asignar</option>
-            {formadores.map((p) => <option key={p.id} value={p.id}>{p.nombre || p.correo}</option>)}
-          </select>
-        </div>
+        {nuevo ? (
+          <div>
+            <label className="etiqueta" htmlFor="g-form">Formador del semestre</label>
+            <select id="g-form" className="campo" value={f.formador} onChange={(e) => set('formador', e.target.value)}>
+              <option value="">Sin asignar</option>
+              {formadores.map((p) => <option key={p.id} value={p.id}>{p.nombre || p.correo}</option>)}
+              <option value={OTRO}>Otro (sin cuenta en la plataforma)…</option>
+            </select>
+            {f.formador === OTRO && <input className="campo mt-2" maxLength={120} placeholder="Nombre, ej. P. Carlos Gómez" aria-label="Nombre del formador sin cuenta" value={f.formadorNombre} onChange={(e) => set('formadorNombre', e.target.value)} />}
+          </div>
+        ) : (
+          <div>
+            <span className="etiqueta">Formador del semestre</span>
+            <p className="rounded-lg bg-slate-50 px-3 py-2.5 text-sm"><strong>{grupo.formador || 'Sin asignar'}</strong>
+              <span className="block text-xs text-slate-500">Para cambiarlo usa «Cambiar formador» en el grupo: así queda en el historial.</span></p>
+          </div>
+        )}
         <div>
           <label className="etiqueta" htmlFor="g-dia">Día de encuentro</label>
           <select id="g-dia" className="campo" value={f.dia} onChange={(e) => set('dia', e.target.value)}>
@@ -173,8 +190,114 @@ function FormGrupo({ grupo, periodo, centros, cohortes, formadores, grupos, guar
   )
 }
 
+// Cambiar el formador de un grupo con fecha y motivo (el anterior queda en el historial)
+function CambiarFormador({ grupo, periodo, formadores, alGuardar, cerrar }) {
+  const [quien, setQuien] = useState('')
+  const [nombre, setNombre] = useState('')
+  const [desde, setDesde] = useState(() => {
+    const h = hoyISO()
+    return periodo.inicio && h < periodo.inicio ? periodo.inicio : periodo.fin && h > periodo.fin ? periodo.fin : h
+  })
+  const [motivo, setMotivo] = useState(MOTIVOS[0])
+  const [otroMotivo, setOtroMotivo] = useState('')
+  const [error, setError] = useState('')
+  const [trabajando, setTrabajando] = useState(false)
+
+  async function enviar(e) {
+    e.preventDefault()
+    if (!quien) { setError('Elige el nuevo formador.'); return }
+    if (quien === OTRO && !nombre.trim()) { setError('Escribe el nombre del formador.'); return }
+    if (!desde) { setError('Indica desde qué fecha acompaña al grupo.'); return }
+    setTrabajando(true); setError('')
+    const { error: err } = await supabase.rpc('cambiar_formador', {
+      p_grupo: grupo.id, p_formador: quien === OTRO ? null : quien, p_nombre: quien === OTRO ? nombre.trim() : null,
+      p_desde: desde, p_motivo: motivo === OTRO ? (otroMotivo.trim() || null) : motivo,
+    })
+    if (err) {
+      setError(/cambiar_formador/.test(err.message) ? 'Falta instalar historial_formadores.sql en Supabase.' : err.message)
+      setTrabajando(false); return
+    }
+    await alGuardar()
+    cerrar()
+  }
+
+  return (
+    <form onSubmit={enviar} className="space-y-4">
+      <p className="rounded-lg bg-slate-50 px-3 py-2.5 text-sm">
+        Formador actual: <strong>{grupo.formador || 'sin asignar'}</strong>.
+        <span className="block text-xs text-slate-500">Queda en el historial del grupo hasta el día anterior a la fecha que indiques; su nombre no se pierde.</span>
+      </p>
+      <div>
+        <label className="etiqueta" htmlFor="cf-quien">Nuevo formador</label>
+        <select id="cf-quien" className="campo" value={quien} onChange={(e) => setQuien(e.target.value)}>
+          <option value="">Elige…</option>
+          {formadores.filter((p) => p.id !== grupo.formador_id).map((p) => <option key={p.id} value={p.id}>{p.nombre || p.correo}</option>)}
+          <option value={OTRO}>Otro (sin cuenta en la plataforma)…</option>
+        </select>
+        {quien === OTRO && (
+          <>
+            <input className="campo mt-2" maxLength={120} placeholder="Nombre, ej. P. Carlos Gómez" aria-label="Nombre del formador" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+            <p className="mt-1 text-xs text-slate-500">Sin cuenta no podrá entrar a digitar notas: las digita coordinación, y su nombre sí aparece en fichas y documentos.</p>
+          </>
+        )}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="etiqueta" htmlFor="cf-desde">Acompaña al grupo desde</label>
+          <input id="cf-desde" type="date" className="campo" value={desde} min={periodo.inicio ?? undefined} max={periodo.fin ?? undefined} onChange={(e) => setDesde(e.target.value)} />
+        </div>
+        <div>
+          <label className="etiqueta" htmlFor="cf-motivo">Motivo</label>
+          <select id="cf-motivo" className="campo" value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+            {MOTIVOS.map((m) => <option key={m}>{m}</option>)}
+            <option value={OTRO}>Otro…</option>
+          </select>
+          {motivo === OTRO && <input className="campo mt-2" maxLength={200} placeholder="¿Cuál?" aria-label="Otro motivo" value={otroMotivo} onChange={(e) => setOtroMotivo(e.target.value)} />}
+        </div>
+      </div>
+      {periodo.actual && <p className="rounded-lg bg-cielo px-3 py-2 text-xs text-tinta">Es el periodo actual: el nuevo formador queda con permiso para digitar las notas del grupo y el anterior deja de tenerlo.</p>}
+      {error && <p className="text-sm text-alerta" role="alert">{error}</p>}
+      <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+        <button className="btn" disabled={trabajando}>{trabajando ? 'Guardando…' : 'Cambiar formador'}</button>
+        <button type="button" className="btn-sec" onClick={cerrar}>Cancelar</button>
+      </div>
+    </form>
+  )
+}
+
+// Quiénes han acompañado al grupo, con fechas (no se borra)
+function HistorialFormadores({ grupo, version }) {
+  const [filas, setFilas] = useState(null)
+  useEffect(() => {
+    supabase.from('historial_formadores').select('id, nombre, desde, hasta, motivo, formador_id').eq('grupo_id', grupo.id).order('desde', { ascending: true }).order('id')
+      .then(({ data, error }) => setFilas(error ? false : data ?? []))
+  }, [grupo.id, version])
+  if (filas === null) return null
+  if (filas === false) return <p className="text-xs text-slate-500">Para guardar el historial de formadores, instala historial_formadores.sql.</p>
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-semibold text-slate-600">Historial de formadores del grupo</h3>
+      {!filas.length ? <p className="text-sm text-slate-500">Aún no hay formadores registrados.</p> : (
+        <ol className="relative space-y-3 border-l-2 border-slate-200 pl-5">
+          {filas.map((h) => (
+            <li key={h.id} className="relative">
+              <span aria-hidden="true" className={`absolute -left-[1.6rem] top-1.5 h-3 w-3 rounded-full border-2 border-white ${h.hasta ? 'bg-slate-400' : 'bg-oro'}`} />
+              <p className="text-sm font-semibold text-tinta">{h.nombre}{!h.hasta && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-oro">Actual</span>}
+                {!h.formador_id && <span className="ml-2 text-xs font-normal text-slate-400">(sin cuenta)</span>}</p>
+              <p className="text-xs text-slate-500">
+                {h.desde ? `Desde el ${fechaLarga(h.desde)}` : 'Fecha de inicio sin registrar'}{h.hasta ? ` hasta el ${fechaLarga(h.hasta)}` : ''}
+                {h.motivo ? ` · ${h.motivo}` : ''}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
 // Detalle de un grupo: sus matriculados, estados y cambios de grupo
-function DetalleGrupo({ grupo, periodo, grupos, estudiantes, matriculas, nombreGrupo, orden, alCambiar, editar, eliminar }) {
+function DetalleGrupo({ grupo, periodo, grupos, estudiantes, matriculas, nombreGrupo, orden, alCambiar, editar, eliminar, cambiarFormador, versionHistorial }) {
   const [buscar, setBuscar] = useState('')
   const [agregar, setAgregar] = useState(false)
   const [sel, setSel] = useState(new Set())
@@ -215,12 +338,13 @@ function DetalleGrupo({ grupo, periodo, grupos, estudiantes, matriculas, nombreG
           ['Matriculados', `${filas.filter((x) => x.m.estado !== 'retirado').length}${grupo.cupo ? ` de ${grupo.cupo}` : ''}`]].map(([k, v]) => (
           <div key={k} className="rounded-xl bg-slate-50 px-3 py-2">
             <dt className="text-xs text-slate-500">{k}</dt>
-            <dd className={`font-semibold ${k === 'Formador' && !grupo.formador_id ? 'text-amber-700' : 'text-tinta'}`}>{v || 'Sin asignar'}</dd>
+            <dd className={`font-semibold ${k === 'Formador' && !grupo.formador ? 'text-amber-700' : 'text-tinta'}`}>{v || 'Sin asignar'}</dd>
           </div>
         ))}
       </dl>
       <div className="flex flex-wrap gap-2">
         <button className="btn" onClick={() => setAgregar(!agregar)} disabled={periodo.estado === 'cerrado'}>{agregar ? 'Cerrar' : 'Matricular estudiantes'}</button>
+        <button className="btn-sec" onClick={cambiarFormador} disabled={periodo.estado === 'cerrado'}>Cambiar formador</button>
         <button className="btn-sec" onClick={editar}>Editar grupo</button>
         {!propias.length && <button className="ml-auto text-sm text-alerta underline" onClick={eliminar}>Eliminar grupo</button>}
       </div>
@@ -271,6 +395,8 @@ function DetalleGrupo({ grupo, periodo, grupos, estudiantes, matriculas, nombreG
           ))}
         </ul>
       )}
+
+      <div className="border-t border-slate-100 pt-4"><HistorialFormadores grupo={grupo} version={versionHistorial} /></div>
     </div>
   )
 }
@@ -289,6 +415,7 @@ export default function Periodos({ perfil }) {
   const [aviso, setAviso] = useState(null)
   const [dialogo, setDialogo] = useState(null) // { tipo: 'nuevo' | 'editar' | 'ver', grupo }
   const [trabajando, setTrabajando] = useState(false)
+  const [versionHistorial, setVersionHistorial] = useState(0)
 
   async function cargarBase() {
     const [p, ce, co, fo, es] = await Promise.all([
@@ -331,7 +458,7 @@ export default function Periodos({ perfil }) {
   const nombreGrupo = (g) => g ? `${centroDe(g.centro_id) ?? 'Sin centro'} · S${g.semestre} · ${g.nombre}` : ''
   const gruposVista = grupos.map((g) => {
     const ms = matriculas.filter((m) => m.grupo_id === g.id && m.estado !== 'retirado')
-    return { ...g, formador: nombreDe(g.formador_id), cohorte: cohortes.find((c) => c.id === g.cohorte_id)?.nombre, inscritos: ms.length }
+    return { ...g, formador: g.formador_nombre ?? nombreDe(g.formador_id), cohorte: cohortes.find((c) => c.id === g.cohorte_id)?.nombre, inscritos: ms.length }
   })
   const secciones = [...centros, { id: null, nombre: 'Sin centro' }]
     .map((c) => ({ centro: c, grupos: gruposVista.filter((g) => (g.centro_id ?? null) === c.id).sort((a, b) => a.semestre - b.semestre || a.nombre.localeCompare(b.nombre)) }))
@@ -467,7 +594,7 @@ export default function Periodos({ perfil }) {
 
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[['Grupos', grupos.length, ''], ['Matriculados', matriculas.filter((m) => !['aplazado', 'retirado'].includes(m.estado)).length, ''],
-              ['Grupos sin formador', grupos.filter((g) => !g.formador_id).length, grupos.some((g) => !g.formador_id) ? 'text-amber-700' : ''],
+              ['Grupos sin formador', grupos.filter((g) => !g.formador_id && !g.formador_nombre).length, grupos.some((g) => !g.formador_id && !g.formador_nombre) ? 'text-amber-700' : ''],
               ['Activos sin matrícula', sinMatricula.length, sinMatricula.length ? 'text-alerta' : '']].map(([t, n, c]) => (
               <div key={t} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className={`font-serif text-3xl font-semibold tabular-nums ${c || 'text-tinta'}`}>{n}</p>
@@ -575,8 +702,16 @@ export default function Periodos({ perfil }) {
         <Dialogo ancho="max-w-3xl" titulo={`${grupoAbierto.nombre} · Semestre ${grupoAbierto.semestre}`}
           subtitulo={`${centroDe(grupoAbierto.centro_id) ? `Centro ${centroDe(grupoAbierto.centro_id)}` : 'Sin centro'} · Periodo ${periodo.nombre}`} cerrar={() => setDialogo(null)}>
           <DetalleGrupo grupo={grupoAbierto} periodo={periodo} grupos={gruposVista} estudiantes={estudiantesConMarca} matriculas={matriculas}
-            nombreGrupo={nombreGrupo} orden="apellidos" alCambiar={() => recargar()}
+            nombreGrupo={nombreGrupo} orden="apellidos" alCambiar={() => recargar()} versionHistorial={versionHistorial}
+            cambiarFormador={() => setDialogo({ tipo: 'formador', grupo: grupoAbierto })}
             editar={() => setDialogo({ tipo: 'editar', grupo: grupoAbierto })} eliminar={() => eliminarGrupo(grupoAbierto)} />
+        </Dialogo>
+      )}
+      {dialogo?.tipo === 'formador' && grupoAbierto && (
+        <Dialogo titulo="Cambiar formador" subtitulo={`${nombreGrupo(grupoAbierto)} · Periodo ${periodo.nombre}`} cerrar={() => setDialogo({ tipo: 'ver', grupo: grupoAbierto })}>
+          <CambiarFormador grupo={grupoAbierto} periodo={periodo} formadores={formadores}
+            alGuardar={async () => { await recargar(); setVersionHistorial((v) => v + 1); setAviso({ ok: true, t: 'Formador cambiado. El anterior quedó en el historial del grupo.' }) }}
+            cerrar={() => setDialogo({ tipo: 'ver', grupo: grupoAbierto })} />
         </Dialogo>
       )}
     </section>
