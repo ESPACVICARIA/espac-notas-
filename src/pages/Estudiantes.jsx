@@ -211,7 +211,7 @@ export default function Estudiantes({ perfil }) {
     const g = per.grupos.find((x) => x.cohorte_id === c.id)
     const centro = (id) => centros.find((x) => x.id === id)?.nombre
     return g
-      ? { id: c.id, nombre: `Semestre ${g.semestre} · ${g.nombre}`, detalle: [centro(g.centro_id) && `Centro ${centro(g.centro_id)}`, `Periodo ${per.periodo?.nombre}`, c.nombre, nombreFormador(g.formador_id) && `Formador: ${nombreFormador(g.formador_id)}`].filter(Boolean).join(' · ') }
+      ? { id: c.id, nombre: `Semestre ${g.semestre} · ${g.nombre}`, detalle: [centro(g.centro_id) && `Centro ${centro(g.centro_id)}`, `Periodo ${per.periodo?.nombre}`, c.nombre, (g.formador_nombre ?? nombreFormador(g.formador_id)) && `Formador: ${g.formador_nombre ?? nombreFormador(g.formador_id)}`].filter(Boolean).join(' · ') }
       : { id: c.id, nombre: c.nombre, detalle: [c.centros?.nombre && `Centro ${c.centros.nombre}`, c.semestre_actual && `Semestre ${c.semestre_actual}`].filter(Boolean).join(' · ') }
   })()
   const mostrarTarjetas = vista === 'grupos' && !filtroCohorte && !busqueda.trim()
