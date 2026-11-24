@@ -81,9 +81,12 @@ export default function Ficha({ perfil }) {
     supabase.from('estudiantes').select('*, cohortes(nombre, semestre_actual), centros!estudiantes_centro_id_fkey(nombre)').eq('id', id).single().then(async ({ data }) => {
       if (!vigente) return
       setEst(data)
-      if (data?.cohorte_id) {
-        const { data: f } = await supabase.rpc('formadores_cohorte', { p_cohorte: data.cohorte_id })
-        if (vigente) setFormadores(f ?? {})
+      if (data) {
+        // Los formadores que este estudiante tuvo en cada semestre (según su historial de grupos);
+        // si aún no se instaló el historial, los de su cohorte
+        let r = await supabase.rpc('formadores_estudiante', { p_estudiante: data.id })
+        if (r.error && data.cohorte_id) r = await supabase.rpc('formadores_cohorte', { p_cohorte: data.cohorte_id })
+        if (vigente) setFormadores(r.error ? {} : r.data ?? {})
       }
     })
     if (!espacios.length) supabase.from('espacios').select('*').order('semestre').order('orden').order('id').then(({ data }) => setEspacios(data ?? []))
