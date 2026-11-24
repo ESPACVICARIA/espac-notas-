@@ -68,7 +68,7 @@ export default function GruposCentros({ lista, cohortes, centros, filtroCentro, 
     const deCohorte = (c) => ({ ...c, clave: `c${c.id}`, ...conteo(c.id),
       detalle: [c.anio && `Año ${c.anio}`, c.semestre_actual && `Semestre ${c.semestre_actual}`].filter(Boolean).join(' · ') || 'Cohorte' })
     const deGrupo = (g) => ({ id: g.cohorte_id, grupoId: g.id, clave: `g${g.id}`, centro_id: g.centro_id, nombre: `Semestre ${g.semestre} · ${g.nombre}`, etiqueta: `Semestre ${g.semestre}`, corto: g.nombre, ...conteo(g.cohorte_id),
-      detalle: [nombreCohorte(g.cohorte_id), nombreFormador(g.formador_id) ?? (admin ? 'sin formador' : null), g.dia].filter(Boolean).join(' · ') })
+      detalle: [nombreCohorte(g.cohorte_id), g.formador_nombre ?? nombreFormador(g.formador_id) ?? (admin ? 'sin formador' : null), g.dia].filter(Boolean).join(' · ') })
     const tarjetas = porGrupo
       ? [...grupos].sort((a, b) => a.semestre - b.semestre || a.nombre.localeCompare(b.nombre)).map(deGrupo)
       : cohortes.map(deCohorte)
